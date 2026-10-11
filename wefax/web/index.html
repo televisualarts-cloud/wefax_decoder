@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WEFAX Decoder</title>
+<style>
+  :root {
+    --bg: #0b0e12; --panel: #12161c; --line: #222a33; --text: #c9d3dd; --dim: #6c7a88;
+    --accent: #4fb0ff; --cyan: #3fd8e8; --rx: #3ddc84; --busy: #ffb347; --bad: #ff6b6b;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, "Liberation Mono", monospace;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 16px; padding: 10px 16px;
+    border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+  h1 { font: 600 17px var(--mono); letter-spacing: .12em; margin: 0; color: #e8eef4; }
+  .pill { font: 600 14px var(--mono); padding: 3px 10px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--dim); letter-spacing: .06em; }
+  .pill.receiving { color: var(--rx); border-color: var(--rx); }
+  .pill.decoding { color: var(--busy); border-color: var(--busy); }
+  .pill.offline { color: var(--bad); border-color: var(--bad); }
+  .meter { display: flex; align-items: center; gap: 8px; font: 14px var(--mono); color: var(--dim); }
+  header .meter:not(#clock) { color: var(--cyan); }
+  #clock { color: #ffffff; font-size: 18px; }
+  .prio { display: flex; align-items: center; gap: 6px; font: 14px var(--mono); color: var(--dim); white-space: nowrap; }
+  .prio select { font: 600 14px var(--mono); color: #ffffff; background: #171c23; border: 1px solid var(--line);
+    border-radius: 4px; padding: 3px 6px; max-width: 200px; }
+  .prio select:disabled { opacity: .45; }
+  /* fixed-width slots so changing readings don't shift the rest of the line */
+  #lvltxt { display: inline-block; width: 9ch; text-align: right; white-space: nowrap; }
+  #sig { width: 20ch; white-space: nowrap; overflow: hidden; }
+  #tuned { border-left: 1px solid var(--line); padding-left: 16px; white-space: nowrap; }
+  #tuned:empty { border-left: 0; }
+  .bar { width: 120px; height: 6px; background: #1b222a; border-radius: 3px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+  .spacer { flex: 1; }
+  body { display: flex; flex-direction: column; }
+  header { flex: 0 0 auto; }
+  .page { display: grid; grid-template-columns: 210px 1fr; flex: 1 1 auto; min-height: 0; }
+  main { display: grid; grid-template-rows: auto auto 1fr; height: 100%; min-width: 0; min-height: 0; }
+  aside { display: flex; flex-direction: column; min-height: 0; background: var(--panel);
+    border-right: 1px solid var(--line); }
+  .daynav { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; padding: 8px;
+    border-bottom: 1px solid var(--line); font: 14px var(--mono); }
+  .daynav button { padding: 4px 8px; }
+  .daynav button:disabled { opacity: .35; cursor: default; }
+  .daynav span { flex: 1; text-align: center; color: var(--text); white-space: nowrap; }
+  .daynav span small { display: block; color: var(--dim); font-size: 12px; }
+  .gallery { flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; padding: 8px;
+    display: flex; flex-direction: column; gap: 8px; scrollbar-color: #2a333d var(--panel); }
+  .gallery .none { color: var(--dim); font: 13px var(--mono); text-align: center; padding: 20px 4px; }
+  .sched { display: flex; gap: 8px; align-items: center; padding: 6px 16px; border-bottom: 1px solid var(--line);
+    font: 14px var(--mono); color: var(--dim); flex-wrap: wrap; background: #0e1217; }
+  .sched select { font: 14px var(--mono); color: var(--text); background: #171c23; border: 1px solid var(--line);
+    border-radius: 4px; padding: 3px 6px; max-width: 260px; }
+  /* station / frequency: large display items */
+  .sched #selStation, .sched #selFreq { font: 600 26px var(--mono); color: #ffffff; padding: 6px 10px;
+    border-radius: 6px; background: #141a21; border-color: #2c3742; }
+  .sched #selStation { max-width: 600px; }
+  .sched #selFreq { max-width: 440px; }
+  .sched #bTune { font-size: 22px; padding: 8px 18px; }
+  .sched button:disabled, .toolbar button:disabled { opacity: .45; cursor: default; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-left: 6px; }
+  .chip { font: 13px var(--mono); padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px;
+    color: var(--text); cursor: pointer; background: #121820; white-space: nowrap; max-width: 300px;
+    overflow: hidden; text-overflow: ellipsis; }
+  .chip:hover { border-color: var(--accent); }
+  .chip b { color: var(--accent); font-weight: 600; }
+  #tuneMsg { color: var(--rx); }
+  #bAuto.on { border-color: var(--rx); color: var(--rx); }
+  .chip.core { border-color: #2c4a36; }
+  .chip.dx { border-color: #4a3d22; }
+  .chip.dx b { color: var(--busy); }
+  .chip.core b { color: var(--rx); }
+  .chip.tuned { background: #173022; border-color: var(--rx); }
+  .chip.done, .chip.closing, .chip.skipped { opacity: .45; }
+  .toolbar { display: flex; gap: 8px; align-items: center; padding: 8px 16px;
+    border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  button, a.btn { font: 14px var(--mono); color: var(--text); background: #171c23;
+    border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer;
+    text-decoration: none; }
+  button.on { border-color: var(--accent); color: var(--accent); }
+  .meta { font: 14px var(--mono); color: var(--cyan); margin-left: 8px; }
+  .viewer { overflow: auto; background: #07090c; position: relative; }
+  #stage { position: relative; margin: 0 auto; overflow: hidden; }
+  #stage img { position: absolute; left: 0; top: 0; transform-origin: 0 0; max-width: none;
+    display: block; background: #fff; user-select: none; -webkit-user-drag: none; }
+  .viewer.pan { cursor: grab; }
+  .viewer.dragging { cursor: grabbing; }
+  .empty { color: var(--dim); font: 15px var(--mono); padding: 40px; text-align: center; }
+  .thumb { flex: 0 0 auto; width: 100%; cursor: pointer; border: 1px solid var(--line);
+    border-radius: 4px; overflow: hidden; background: #000; }
+  .thumb.sel { border-color: var(--accent); }
+  .thumb img { width: 100%; height: auto; display: block; background: #fff; }
+  .thumb div { font: 13px var(--mono); color: var(--dim); padding: 3px 6px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; }
+  .thumb div b { color: var(--text); font-weight: 600; }
+  .thumb.sel div b { color: var(--accent); }
+  /* live panel: fixed at the top of the column */
+  .livewrap { flex: 0 0 auto; padding: 8px; border-bottom: 1px solid var(--line); }
+  .live { position: relative; height: 150px; border: 2px solid var(--bad); border-radius: 4px;
+    overflow: hidden; background: #05070a; cursor: default; }
+  /* scaled to the panel width; grows down from the top, then keeps the newest lines in view */
+  .live img { position: absolute; left: 0; top: 0; width: 100%; height: auto; display: block; }
+  .live img.full { top: auto; bottom: 0; }
+  .live .ovl { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font: 600 17px var(--mono); letter-spacing: .14em; pointer-events: none; }
+  .live .ovl span { padding: 3px 10px; border-radius: 3px; background: rgba(5, 7, 10, .72); }
+  .live .cap { position: absolute; left: 0; right: 0; bottom: 0; font: 12px var(--mono); padding: 2px 6px;
+    background: rgba(5, 7, 10, .78); white-space: normal; line-height: 1.3; }
+  .live.idle { border-color: var(--bad); }
+  .live.idle .ovl { color: var(--bad); }
+  .live.nosig { border-color: var(--busy); cursor: pointer; }
+  .live.nosig .ovl, .live.nosig .cap { color: var(--busy); }
+  .live.rx { border-color: var(--rx); cursor: pointer; }
+  .live.rx .cap { color: var(--rx); }
+  .live.sel { box-shadow: 0 0 0 1px var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>WEFAX</h1>
+  <span id="state" class="pill">CONNECTING</span>
+  <span class="meter">IN <span class="bar"><i id="lvl"></i></span><span id="lvltxt">-- dBFS</span></span>
+  <span class="meter" id="sig"></span>
+  <span class="meter" id="tuned"></span>
+  <span class="spacer"></span>
+  <label class="prio">1st priority <select id="selP1"></select></label>
+  <label class="prio">2nd priority <select id="selP2"></select></label>
+  <span class="meter" id="clock"></span>
+</header>
+<div class="page">
+<aside>
+  <div class="livewrap">
+    <div class="live idle" id="live"><img id="liveImg" alt="" hidden><div class="ovl" id="liveOvl"><span>IDLE</span></div><div class="cap" id="liveTxt" hidden></div></div>
+  </div>
+  <div class="daynav">
+    <button id="bPrev" title="Previous day">&minus;1</button>
+    <span id="dayLbl">TODAY</span>
+    <button id="bNext" title="Next day">+1</button>
+  </div>
+  <div class="gallery" id="strip"><div id="gallery" style="display:contents"></div></div>
+</aside>
+<main>
+  <div class="sched">
+    <span>STATION</span><select id="selStation"></select>
+    <span>FREQ</span><select id="selFreq"></select>
+    <button id="bTune">Tune</button><span id="tuneMsg"></span>
+    <div style="flex-basis:100%;height:0"></div>
+    <span>NEXT</span><div class="chips" id="upcoming"></div>
+    <div style="flex-basis:100%;height:0"></div>
+    <button id="bAuto" title="Auto-schedule: tune SDR Console to the most important Northwood/DWD charts, DX in the gaps">AUTO</button>
+    <span id="autoMsg"></span>
+    <span>PLAN</span><div class="chips" id="plan"></div>
+  </div>
+  <div class="toolbar">
+    <button id="bEnh" class="on">Enhanced</button>
+    <button id="bRaw">Raw</button>
+    <button id="bFit" class="on">Fit</button>
+    <button id="b11">1:1</button>
+    <button id="bRotL" title="Rotate the fax 90&deg; anticlockwise">Rotate &minus;90&deg;</button>
+    <button id="bRot" title="Rotate the fax 90&deg; clockwise">Rotate +90&deg;</button>
+    <a id="dl" class="btn" href="#" download>Download</a>
+    <span class="meta" id="meta"></span>
+  </div>
+  <div class="viewer" id="viewer"><div class="empty" id="empty">No faxes yet. Waiting for a start tone or phasing signal&hellip;</div><div id="stage"><img id="img" alt="" hidden draggable="false"></div></div>
+</main>
+</div>
+<script>
+const $ = id => document.getElementById(id);
+let faxes = [], cur = null, variant = 'enhanced', liveSel = false, liveInfo = {}, liveN = 0;
+const liveUrl = () => '/live.png?n=' + liveN;
+function liveMeta() {
+  return ['LIVE RAW PREVIEW', `${liveInfo.lines || 0} lines`, `${liveInfo.lpm || '?'} LPM`,
+    liveInfo.locked ? 'slant locked' : 'slant not yet locked',
+    `AFC ${liveInfo.offset_hz > 0 ? '+' : ''}${liveInfo.offset_hz ?? 0} Hz`].join('  ·  ');
+}
+// live panel: IDLE (red) / NO SIGNAL with incoming noise (orange) / receiving (green)
+let liveMode = 'idle', imgMode = null, lastStatus = {};
+const slotTxt = w => w ? `${esc((w.short || '').split(/\s+/)[0])} ${w.slot ? w.slot.slice(0, 2) + ':' + w.slot.slice(2) + 'UT' : ''}` : '';
+function liveState(s) {
+  if (s.state === 'receiving') return s.faded ? 'rxfade' : 'rx';
+  if (s.watch) return 'nosig';
+  return 'idle';
+}
+function paintLive() {
+  const s = lastStatus, el = $('live');
+  liveMode = liveState(s);
+  el.className = 'live ' + (liveMode === 'rxfade' ? 'nosig' : liveMode) + (liveSel ? ' sel' : '');
+  const showImg = ((liveMode === 'rx' || liveMode === 'rxfade') && imgMode === 'receiving') || (liveMode === 'nosig' && imgMode === 'nosignal');
+  $('liveImg').hidden = !showImg;
+  $('liveOvl').hidden = liveMode === 'rx';
+  $('liveOvl').innerHTML = `<span>${liveMode === 'nosig' || liveMode === 'rxfade' ? 'NO SIGNAL' : 'IDLE'}</span>`;
+  const cap = $('liveTxt');
+  if (liveMode === 'rx') { cap.hidden = false; cap.innerHTML = `\u25CF RECEIVING ${liveInfo.lines || 0} lines${s.watch ? ' \u00B7 ' + slotTxt(s.watch) : ''}`; }
+  else if (liveMode === 'rxfade') { cap.hidden = false; cap.innerHTML = `still listening${s.watch ? ' \u00B7 ' + slotTxt(s.watch) : ''}`; }
+  else if (liveMode === 'nosig') { cap.hidden = false; cap.innerHTML = `expected: ${slotTxt(s.watch)}`; cap.title = s.watch.contents || ''; }
+  else { cap.hidden = true; }
+  if (liveSel && liveMode === 'idle') { liveSel = false; show(cur || faxes[0]); }
+}
+function showLive() {
+  if (liveMode === 'idle') return;
+  liveSel = true;
+  if (lastShownId !== 'live') { fitMode = true; lastShownId = 'live'; }
+  rot = 0; $('bRot').disabled = $('bRotL').disabled = true;
+  $('img').src = liveUrl(); $('img').hidden = false; $('empty').hidden = true;
+  $('dl').href = liveUrl(); $('dl').setAttribute('download', 'live.png');
+  $('meta').textContent = liveMode === 'nosig' ? `NO SIGNAL \u00B7 incoming noise \u00B7 expected ${slotTxt(lastStatus.watch)} ${lastStatus.watch.contents || ''} \u00B7 not saved` : liveMeta();
+  document.querySelectorAll('.thumb').forEach(t => t.classList.remove('sel'));
+  paintLive();
+}
+function onLive(info) {
+  liveInfo = info; liveN++;
+  imgMode = info.mode || 'receiving';
+  $('liveImg').src = liveUrl();
+  paintLive();
+  if (liveSel && !$('live').classList.contains('idle')) showLive();
+}
+$('live').onclick = showLive;
+$('liveImg').addEventListener('load', () => {
+  const im = $('liveImg');
+  im.classList.toggle('full', im.offsetHeight > $('live').clientHeight);
+});
+
+function fmtUTC(s) { return s ? s.replace('T', ' ').replace('Z', 'Z') : ''; }
+let lastShownId = null;
+function show(f) {
+  liveSel = false;
+  $('live').classList.remove('sel');
+  cur = f;
+  if (!f) return;
+  if (f.id !== lastShownId) { fitMode = true; lastShownId = f.id; }   // a newly selected fax opens at Fit
+  const file = variant === 'raw' ? f.files.raw : f.files.enhanced;
+  rot = rots[f.id] || 0;
+  $('bRot').disabled = $('bRotL').disabled = false;
+  $('img').src = '/faxes/' + file;
+  $('img').hidden = false; $('empty').hidden = true;
+  layout();
+  $('dl').href = '/faxes/' + file; $('dl').setAttribute('download', file);
+  const m = f.meta || {};
+  const pr = f.product;
+  const prTxt = pr ? (pr.slot ? `${pr.short} ${pr.slot}Z ${pr.contents}${pr.valid ? ' (' + pr.valid + 'Z run)' : ''}` : pr.short) : '';
+  $('meta').textContent = [prTxt, fmtUTC(f.utc), `IOC ${m.ioc}`, `${m.lpm} LPM`,
+    `AFC ${m.afc_hz > 0 ? '+' : ''}${m.afc_hz} Hz`, `clock ${m.clock_ppm > 0 ? '+' : ''}${m.clock_ppm} ppm`,
+    `${m.lines} lines`, `quality ${Math.round((m.quality || 0) * 100)}%`,
+    f.enhance ? f.enhance.mode : ''].join('  ·  ');
+  document.querySelectorAll('.thumb').forEach(t => t.classList.toggle('sel', t.dataset.id === f.id));
+}
+// ---- thumbnail strip: one UTC day at a time, newest at the top ----
+const DAY = 86400000;
+const utcDay = ms => Math.floor(ms / DAY) * DAY;
+let dayMs = utcDay(Date.now());
+const isToday = () => dayMs === utcDay(Date.now());
+const faxDay = f => (f.utc ? utcDay(Date.parse(f.utc)) : NaN);
+const esc = t => String(t).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+function thumbLabel(f) {
+  const p = f.product || {};
+  const name = (p.short || 'Unknown').split(/\s+/)[0];
+  const hhmm = p.slot && /^\d{4}$/.test(p.slot) ? p.slot : (f.utc || '').slice(11, 16).replace(':', '');
+  return `<b>${esc(name)}</b> ${hhmm.slice(0, 2)}:${hhmm.slice(2, 4)}UT`;
+}
+function dayLabel() {
+  const d = new Date(dayMs);
+  const txt = d.toLocaleDateString('en-GB', {weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC'}).replace(',', '');
+  $('dayLbl').innerHTML = `${isToday() ? 'TODAY' : esc(txt)}<small>${isToday() ? esc(txt) : d.getUTCFullYear()} UTC</small>`;
+  $('bNext').disabled = isToday();
+}
+function renderGallery() {
+  const g = $('gallery'); g.innerHTML = '';
+  const day = faxes.filter(f => faxDay(f) === dayMs)
+    .sort((a, b) => (b.utc || '').localeCompare(a.utc || ''));
+  for (const f of day) {
+    const d = document.createElement('div');
+    d.className = 'thumb' + (cur && cur.id === f.id && !liveSel ? ' sel' : ''); d.dataset.id = f.id;
+    const p = f.product || {};
+    const tip = [p.contents, p.valid ? p.valid + 'Z run' : '', 'received ' + fmtUTC(f.utc)].filter(Boolean).join(' - ');
+    d.innerHTML = `<img loading="lazy" src="/faxes/${f.files.thumb}" alt=""><div title="${esc(tip)}">${thumbLabel(f)}</div>`;
+    d.onclick = () => show(f);
+    g.appendChild(d);
+  }
+  if (!day.length) {
+    g.innerHTML = `<div class="none">No faxes on this day</div>`;
+  }
+  dayLabel();
+}
+function stepDay(n) {
+  const today = utcDay(Date.now());
+  dayMs = Math.min(today, dayMs + n * DAY);
+  renderGallery();
+  $('strip').scrollTop = 0;
+}
+$('bPrev').onclick = () => stepDay(-1);
+$('bNext').onclick = () => stepDay(1);
+// roll over to the new day at 00:00 UTC if the strip was showing 'today'
+let lastToday = utcDay(Date.now());
+setInterval(() => {
+  const t = utcDay(Date.now());
+  if (t !== lastToday) { if (dayMs === lastToday) dayMs = t; lastToday = t; renderGallery(); }
+}, 30000);
+async function load(selectNewest) {
+  try {
+    faxes = await (await fetch('/api/list')).json();
+    faxes.sort((a, b) => (b.utc || '').localeCompare(a.utc || ''));
+    renderGallery();
+    if (liveSel) return;
+    if (selectNewest && !isToday() && cur) selectNewest = false;   // don't jump while browsing another day
+    if (selectNewest || !cur) show(faxes[0]);
+    else show(faxes.find(f => f.id === cur.id) || faxes[0]);
+  } catch (e) {}
+}
+function setVariant(v) { variant = v; $('bEnh').classList.toggle('on', v === 'enhanced'); $('bRaw').classList.toggle('on', v === 'raw'); if (!liveSel) show(cur); }
+// ---- viewer: fit / 1:1 / mouse-wheel zoom, drag to pan, rotation per fax ----
+// zoom is kept in 'enhanced-image pixels' (2 x the fax line width), so Raw
+// and Enhanced always show the same part of the chart at the same size
+let fitMode = true, zoom = 1, rot = 0;
+function refK() {        // reference pixels per pixel of the image on screen
+  const nw = $('img').naturalWidth || 1;
+  const fw = (!liveSel && cur && cur.meta && cur.meta.width) ? cur.meta.width * 2 : nw;
+  return fw / nw;
+}
+const rots = (() => { try { return JSON.parse(localStorage.getItem('wefaxRot') || '{}'); } catch (e) { return {}; } })();
+function saveRots() { try { localStorage.setItem('wefaxRot', JSON.stringify(rots)); } catch (e) {} }
+function dims() {
+  const im = $('img'), nw = im.naturalWidth || 1, nh = im.naturalHeight || 1;
+  return rot % 180 ? [nh, nw, nw, nh] : [nw, nh, nw, nh];   // rotated w/h, natural w/h
+}
+function fitScale() {     // in reference units
+  const [rw] = dims();
+  return Math.min($('viewer').clientWidth, 1810) / (rw * refK());
+}
+function layout() {
+  const im = $('img');
+  if (im.hidden || !im.naturalWidth) return;
+  const [rw, rh, nw, nh] = dims();
+  if (fitMode) zoom = fitScale();
+  const scale = zoom * refK();              // screen px per image px
+  const W = nw * scale, H = nh * scale;
+  im.style.width = W + 'px'; im.style.height = H + 'px';
+  const t = {0: '', 90: `translate(${H}px,0) rotate(90deg)`, 180: `translate(${W}px,${H}px) rotate(180deg)`,
+             270: `translate(0,${W}px) rotate(270deg)`}[rot];
+  im.style.transform = t;
+  $('stage').style.width = rw * scale + 'px'; $('stage').style.height = rh * scale + 'px';
+  $('bFit').classList.toggle('on', fitMode); $('b11').classList.toggle('on', !fitMode && Math.abs(zoom - 1) < 1e-6);
+  $('viewer').classList.toggle('pan', !fitMode);
+}
+function setZoom(fit) { fitMode = fit; if (!fit) zoom = 1; layout(); }
+function zoomAt(newZoom, mx, my) {        // keep the point under the mouse still
+  const v = $('viewer'), st = $('stage');
+  const fx = (v.scrollLeft + mx - st.offsetLeft) / st.offsetWidth;
+  const fy = (v.scrollTop + my - st.offsetTop) / st.offsetHeight;
+  fitMode = false; zoom = newZoom; layout();
+  v.scrollLeft = fx * st.offsetWidth + st.offsetLeft - mx;
+  v.scrollTop = fy * st.offsetHeight + st.offsetTop - my;
+}
+$('viewer').addEventListener('wheel', e => {
+  if ($('img').hidden) return;
+  e.preventDefault();
+  const r = $('viewer').getBoundingClientRect();
+  const f = Math.pow(1.15, -Math.sign(e.deltaY) * Math.min(3, Math.abs(e.deltaY) / 100 || 1));
+  const lo = Math.min(fitScale(), 1) * 0.5, hi = 4;
+  zoomAt(Math.max(lo, Math.min(hi, zoom * f)), e.clientX - r.left, e.clientY - r.top);
+}, {passive: false});
+// drag to pan; a click without dragging toggles Fit / 1:1 as before
+let drag = null;
+$('viewer').addEventListener('mousedown', e => {
+  if (e.button !== 0 || $('img').hidden) return;
+  drag = {x: e.clientX, y: e.clientY, sl: $('viewer').scrollLeft, st: $('viewer').scrollTop, moved: false};
+  e.preventDefault();
+});
+window.addEventListener('mousemove', e => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  if (Math.abs(dx) + Math.abs(dy) > 4) { drag.moved = true; $('viewer').classList.add('dragging'); }
+  $('viewer').scrollLeft = drag.sl - dx; $('viewer').scrollTop = drag.st - dy;
+});
+window.addEventListener('mouseup', e => {
+  if (!drag) return;
+  const d = drag; drag = null; $('viewer').classList.remove('dragging');
+  if (!d.moved && e.target === $('img')) {
+    const r = $('viewer').getBoundingClientRect();
+    if (fitMode) zoomAt(1, e.clientX - r.left, e.clientY - r.top); else setZoom(true);
+  }
+});
+$('img').addEventListener('load', layout);
+window.addEventListener('resize', layout);
+function setRot(r) {
+  rot = r;
+  if (!liveSel && cur) { if (r) rots[cur.id] = r; else delete rots[cur.id]; saveRots(); }
+  layout();
+}
+$('bRot').onclick = () => { if (!liveSel && cur) setRot((rot + 90) % 360); };
+$('bRotL').onclick = () => { if (!liveSel && cur) setRot((rot + 270) % 360); };
+$('bEnh').onclick = () => setVariant('enhanced');
+$('bRaw').onclick = () => setVariant('raw');
+$('bFit').onclick = () => setZoom(true);
+$('b11').onclick = () => setZoom(false);
+
+let lastState = null;
+function mmss(s) { s = Math.floor(s); return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0'); }
+function tuned(s) {
+  const parts = [];
+  if (s.dial_khz) parts.push(s.dial_khz.toFixed(2) + ' kHz' + (s.usb === false ? ' (not USB!)' : ''));
+  else if (s.cat === false) parts.push('CAT --');
+  if (s.station) parts.push(s.station);
+  if (s.state !== 'receiving' && s.next) parts.push(`next ${s.next} in ${s.next_in} min`);
+  $('tuned').textContent = parts.join('  ·  ');
+}
+function status(s) {
+  tuned(s); followRadio(s);
+  lastStatus = s; paintLive();
+  lastState = s.state;
+  const p = $('state');
+  p.className = 'pill ' + (s.state || '');
+  if (s.state === 'receiving') p.textContent = `RECEIVING ${mmss(s.elapsed || 0)}${s.ioc ? ' · IOC ' + s.ioc : ''}${s.chart ? ' · ' + s.chart : ''}`;
+  else if (s.state === 'decoding') p.textContent = 'DECODING';
+  else if (s.state === 'file') p.textContent = 'FILE MODE';
+  else p.textContent = 'IDLE';
+  if (s.level_db !== undefined) {
+    const pct = Math.max(0, Math.min(100, (s.level_db + 60) / 60 * 100));
+    $('lvl').style.width = pct + '%';
+    $('lvltxt').textContent = s.level_db.toFixed(0) + ' dBFS';
+  }
+  if (s.signal) $('sig').textContent = 'SIG ' + s.signal.toUpperCase() +
+    (s.snr_db !== undefined && s.snr_db > -25 ? `  ${s.snr_db > 0 ? '+' : ''}${s.snr_db.toFixed(0)} dB` : '');
+}
+function connect() {
+  const es = new EventSource('/events');
+  es.addEventListener('status', e => status(JSON.parse(e.data)));
+  es.addEventListener('fax', () => { if (liveSel) liveSel = false; load(true); });
+  es.addEventListener('live', e => onLive(JSON.parse(e.data)));
+  es.onerror = () => { $('state').className = 'pill offline'; $('state').textContent = 'OFFLINE'; };
+  es.onopen = () => load(false);
+}
+setInterval(() => { $('clock').textContent = new Date().toISOString().slice(11, 19) + 'Z'; }, 1000);
+connect(); load(true);
+// ---------------- schedule / tuning ----------------
+let stations = [], catOn = false, touched = 0, curDial = null;
+const selS = $('selStation'), selF = $('selFreq');
+function station() { return stations.find(x => x.name === selS.value); }
+function allSlots(st) {
+  const m = new Map();
+  st.groups.forEach(g => g.slots.forEach(sl => { if (!m.has(sl[0])) m.set(sl[0], {t: sl[0], c: sl[1], v: sl[2], khz: g.khz}); }));
+  return [...m.values()];
+}
+function fillFreqs(keep) {
+  const st = station(); if (!st) return;
+  const ks = [...new Set(st.groups.flatMap(g => g.khz))].sort((a, b) => a - b);
+  const prev = keep ? selF.value : null;
+  selF.innerHTML = ks.map(k => `<option value="${k}">${k} kHz  (dial ${(k - 1.9).toFixed(1)})</option>`).join('');
+  if (prev && ks.includes(+prev)) selF.value = prev;
+}
+function minsUntil(hhmm) {
+  const n = new Date(), now = n.getUTCHours() * 60 + n.getUTCMinutes();
+  return ((+hhmm.slice(0, 2) * 60 + +hhmm.slice(2)) - now + 1440) % 1440;
+}
+function fillUpcoming() {
+  const st = station(); if (!st) return;
+  const list = allSlots(st).sort((a, b) => minsUntil(a.t) - minsUntil(b.t)).slice(0, 5);
+  $('upcoming').innerHTML = list.map(x => {
+    const m = minsUntil(x.t);
+    return `<span class="chip" data-t="${x.t}" title="${x.c}${x.v ? ' (' + x.v + 'Z run)' : ''} - click to tune">` +
+      `<b>${x.t.slice(0, 2)}:${x.t.slice(2)}Z</b> ${m < 60 ? m + 'm' : Math.floor(m / 60) + 'h' + String(m % 60).padStart(2, '0')} · ${x.c}</span>`;
+  }).join('');
+  document.querySelectorAll('.chip').forEach(c => c.onclick = () => {
+    const x = allSlots(station()).find(y => y.t === c.dataset.t);
+    if (!x) return;
+    if (!x.khz.includes(+selF.value)) selF.value = String(x.khz[0]);
+    tune();
+  });
+}
+async function tune() {
+  touched = Date.now();
+  const r = await fetch('/api/tune', {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({khz: +selF.value, station: selS.value})});
+  const j = await r.json();
+  $('tuneMsg').style.color = r.ok ? 'var(--rx)' : 'var(--bad)';
+  $('tuneMsg').textContent = r.ok ? `tuned ${j.dial_khz} USB` : (j.error || 'failed');
+  setTimeout(() => $('tuneMsg').textContent = '', r.ok ? 4000 : 12000);
+}
+async function loadStations() {
+  const j = await (await fetch('/api/stations')).json();
+  stations = j.stations; catOn = j.cat;
+  fillPriorities(j.priorities);
+  selS.innerHTML = stations.map(x => `<option value="${x.name}">${x.short === x.name.split(',')[0] ? x.name : x.short + ' — ' + x.name}</option>`).join('');
+  const pre = j.station && stations.find(x => x.short.toLowerCase() === j.station.toLowerCase() || x.name.toLowerCase().includes(j.station.toLowerCase()));
+  if (pre) selS.value = pre.name;
+  fillFreqs(); fillUpcoming();
+  $('bTune').disabled = !catOn;
+  $('bTune').title = catOn ? 'Retune SDR Console' : 'Start the decoder with --cat COMx to enable tuning';
+}
+// ---- 1st / 2nd priority stations for the auto-scheduler
+function fillPriorities(pri) {
+  const shorts = [...new Set(stations.map(x => x.short))].sort((a, b) => a.localeCompare(b));
+  const opts = shorts.map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join('');
+  $('selP1').innerHTML = opts;
+  $('selP2').innerHTML = '<option value="">(none)</option>' + opts;
+  const off = !pri;
+  $('selP1').disabled = $('selP2').disabled = off;
+  if (pri) { $('selP1').value = pri[0] || ''; $('selP2').value = pri[1] || ''; }
+}
+async function setPriorities(changed) {
+  let a = $('selP1').value, b = $('selP2').value;
+  if (a === b) {            // same station in both: the other one moves to the slot just left
+    if (changed === 'p1') b = prevPri[0]; else a = prevPri[1] || prevPri[0];
+    if (a === b) b = '';
+    $('selP1').value = a; $('selP2').value = b;
+  }
+  const r = await fetch('/api/priorities', {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({first: a, second: b || null})});
+  if (r.ok) { const st = await r.json(); prevPri = st.priorities; loadStations(); loadPlan(); }
+}
+let prevPri = [];
+$('selP1').onfocus = $('selP2').onfocus = () => { prevPri = [$('selP1').value, $('selP2').value || null]; };
+$('selP1').onchange = () => setPriorities('p1');
+$('selP2').onchange = () => setPriorities('p2');
+selS.onchange = () => { touched = Date.now(); fillFreqs(); fillUpcoming();
+  fetch('/api/station', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({station: selS.value})}); };
+selF.onchange = () => { touched = Date.now(); };
+$('bTune').onclick = tune;
+function followRadio(s) {        // keep the pickers in step with SDR Console
+  if (!s.dial_khz || !stations.length || Date.now() - touched < 60000) return;
+  if (s.dial_khz === curDial) return;
+  curDial = s.dial_khz;
+  const k = s.dial_khz + 1.9;
+  for (const st of stations) for (const g of st.groups) for (const f of g.khz) {
+    if (Math.abs(f - k) < 1.2 || Math.abs(f - s.dial_khz) < 1.2) {
+      if (selS.value !== st.name) { selS.value = st.name; fillFreqs(); }
+      selF.value = String(f); fillUpcoming(); return;
+    }
+  }
+}
+setInterval(fillUpcoming, 30000);
+loadStations();
+// ---------------- auto-scheduler ----------------
+async function loadPlan() {
+  let j;
+  try { j = await (await fetch('/api/plan')).json(); } catch (e) { return; }
+  const b = $('bAuto');
+  b.classList.toggle('on', !!j.enabled);
+  b.textContent = j.enabled ? 'AUTO ON' : 'AUTO OFF';
+  b.disabled = !j.cat;
+  if (!j.cat) b.title = 'Start the decoder with --cat COMx to enable the auto-scheduler';
+  $('autoMsg').textContent = j.enabled && j.paused_min ? `paused ${j.paused_min} min (manual tune)` : '';
+  $('plan').innerHTML = (j.plan || []).slice(0, 7).map(x =>
+    `<span class="chip ${x.kind} ${x.state}" title="${x.station} ${x.khz} kHz (dial ${x.dial}) - ${x.contents}${x.valid ? ' (' + x.valid + 'Z)' : ''} [${x.kind}, ${x.state}]">` +
+    `<b>${x.start}</b> ${x.station} ${x.khz} · ${x.contents}</span>`).join('') || '<span style="color:var(--dim)">-</span>';
+}
+$('bAuto').onclick = async () => {
+  const on = !$('bAuto').classList.contains('on');
+  const r = await fetch('/api/auto', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({on})});
+  if (!r.ok) { const j = await r.json(); $('autoMsg').textContent = j.error || 'failed'; }
+  loadPlan();
+};
+setInterval(loadPlan, 10000);
+loadPlan();
+
+
+</script>
+</body>
+</html>

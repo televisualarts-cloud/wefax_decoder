@@ -1,0 +1,22 @@
+# received faxes, logs and per-station settings (created at run time)
+faxes/
+*.wav
+*.part.png
+*.part.jpg
+
+# local backups made during updates
+_backup*/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
