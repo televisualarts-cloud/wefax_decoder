@@ -55,16 +55,15 @@ optional. Without them the decoder uses a Lanczos upscale and cannot do CAT.
    | 8040 kHz    | 8038.1 kHz  |
    | 11086.5 kHz | 11084.6 kHz |
 
-2. Find your audio input and start the decoder:
+2. Start the decoder with `python wefax_decoder.py`. The page opens at
+   <http://127.0.0.1:8730/>.
 
-   ```
-   python wefax_decoder.py --list-devices
-   python wefax_decoder.py --device 12              # by index (safest on Windows)
-   python wefax_decoder.py --device "Line 8"        # or by part of the name
-   ```
+3. Choose the sound-card input carrying the receiver audio in the
+   **Audio in** box at the top of the page. This could be a virtual cable,
+   a USB sound card or a line input. The border turns green when it is
+   running, and the IN meter shows the level. The choice is saved.
 
-3. The page opens at <http://127.0.0.1:8730/>. Each fax appears when its
-   transmission ends.
+Each fax appears when its transmission ends.
 
 On Windows, `start_wefax.bat` starts the decoder with CAT on COM4 and the
 auto-scheduler on. Edit it to suit your set-up.
@@ -72,7 +71,9 @@ auto-scheduler on. Edit it to suit your set-up.
 **Defaults you may want to change** (at the end of `wefax_decoder.py`, or on
 the command line):
 
-- `--device` is the audio input. The default is `Line 8 (Virtual Audio Cable) MME`.
+- `--device` is the audio input used until you choose one on the page. The
+  default is `Line 8 (Virtual Audio Cable) MME`; if that isn't present, the
+  system default input is used. `--list-devices` lists the inputs.
 - `--qth lat,lon` is your location for the propagation model. The default is Plymouth, UK.
 
 To decode a recording instead of live audio, run
@@ -89,7 +90,7 @@ Everything is written under `./faxes/` (change this with `--out`):
 | `thumbs/<name>.jpg` | Thumbnail for the page |
 | `<name>.json` | Decode details: station and chart, IOC, LPM, AFC, clock ppm, quality, tears, etc. |
 | `proplog.jsonl` | The auto-scheduler's log of every attempt (SNR, quality) |
-| `settings.json` | Your CAT port and 1st/2nd priority stations |
+| `settings.json` | Your audio input, CAT port and 1st/2nd priority stations |
 
 Audio is not kept unless you add `--save-audio`.
 

@@ -66,6 +66,9 @@
   .sched #selFreq { max-width: 440px; }
   .sched #bTune { font-size: 22px; padding: 8px 18px; }
   .prio #selCat { border-width: 2px; max-width: 300px; }
+  .prio #selAudio { border-width: 2px; max-width: 340px; }
+  .prio #selAudio.ok { border-color: var(--rx); }
+  .prio #selAudio.bad { border-color: var(--bad); }
   .prio #selCat.ok { border-color: var(--rx); }
   .prio #selCat.bad { border-color: var(--bad); }
   .sched button:disabled, .toolbar button:disabled { opacity: .45; cursor: default; }
@@ -136,6 +139,7 @@
   <span class="meter" id="clock"></span>
 </header>
 <div class="setbar">
+  <label class="prio">Audio in <select id="selAudio" title="Sound-card input carrying the receiver audio"></select></label>
   <label class="prio">CAT port <select id="selCat" title="SDR Console CAT (TS-2000) COM port"></select></label>
   <label class="prio">1st priority <select id="selP1"></select></label>
   <label class="prio">2nd priority <select id="selP2"></select></label>
@@ -504,6 +508,43 @@ async function loadStations() {
   $('bTune').disabled = !catOn;
   $('bTune').title = catOn ? 'Retune SDR Console' : 'Start the decoder with --cat COMx to enable tuning';
 }
+// ---- audio input
+let audioCur = null;
+const audioKey = d => d ? JSON.stringify([d.name, d.api]) : '';
+async function loadAudio(listToo = true) {
+  try {
+    const j = await (await fetch('/api/audio' + (listToo ? '' : '?list=0'))).json();
+    const el = $('selAudio');
+    if (!j.available) { el.disabled = true; el.innerHTML = '<option>file mode</option>'; return; }
+    if (listToo) {
+      const byApi = {};
+      for (const d of j.devices) (byApi[d.api] = byApi[d.api] || []).push(d);
+      let html = '<option value="">(system default)</option>';
+      for (const [api, ds] of Object.entries(byApi)) {
+        html += `<optgroup label="${esc(api)}">` + ds.map(d =>
+          `<option value="${esc(audioKey(d))}">${esc(d.name)}${d.default ? ' (default)' : ''}</option>`).join('') + '</optgroup>';
+      }
+      el.innerHTML = html;
+    }
+    audioCur = j.current;
+    if (document.activeElement !== el) el.value = audioKey(audioCur);
+    if (el.selectedIndex < 0) el.value = '';
+    el.classList.toggle('ok', !!j.streaming);
+    el.classList.toggle('bad', !j.streaming);
+    el.title = j.streaming ? `Listening to ${audioCur ? audioCur.name + ' (' + audioCur.api + ')' : 'default input'}`
+      : `Audio input not running${j.error ? ': ' + j.error : ''}`;
+  } catch (e) {}
+}
+$('selAudio').addEventListener('mousedown', () => { if (document.activeElement !== $('selAudio')) loadAudio(true); });
+$('selAudio').onchange = async () => {
+  const v = $('selAudio').value;
+  const d = v ? JSON.parse(v) : null;
+  await fetch('/api/audio', {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(d ? {name: d[0], api: d[1]} : {})});
+  setTimeout(() => loadAudio(false), 2000);
+};
+setInterval(() => loadAudio(false), 5000);
+
 // ---- SDR Console CAT port
 let catCur = null;
 async function loadPorts() {
@@ -577,6 +618,7 @@ function followRadio(s) {        // keep the pickers in step with SDR Console
 setInterval(fillUpcoming, 30000);
 loadStations();
 loadPorts();
+loadAudio(true);
 // ---------------- auto-scheduler ----------------
 async function loadPlan() {
   let j;

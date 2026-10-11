@@ -394,6 +394,10 @@ def main():
     device = args.device
     if device is not None and device.isdigit():
         device = int(device)
+    saved_audio = hub.load_settings().get("audio_device")
+    if saved_audio:
+        device = saved_audio              # the input chosen on the page wins over --device
+        log.info("audio: using %s (%s) chosen on the page", saved_audio.get("name"), saved_audio.get("api"))
 
     def status_cb(s):
         if s.get("state") == "idle" and proc.busy:
@@ -406,6 +410,7 @@ def main():
                                           max_minutes=args.max_minutes, log=log.info,
                                           on_preview=hub.set_live),
                       device=device, channel=args.channel, samplerate=args.samplerate, log=log.info)
+    hub.capture = cap
 
     def watcher():          # tells the live panel whether a chart is expected now
         last = None

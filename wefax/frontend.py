@@ -282,30 +282,117 @@ def phasing_like(f: np.ndarray, fs: float) -> bool:
 
 
 # --------------------------------------------------------------------------
+_UNSET = object()
+
+
+def list_inputs(sd) -> list[dict]:
+    """All audio inputs, with the Windows host API (MME, WASAPI, ...)."""
+    apis = sd.query_hostapis()
+    try:
+        default_in = sd.default.device[0]
+    except Exception:
+        default_in = -1
+    out = []
+    for i, d in enumerate(sd.query_devices()):
+        if d["max_input_channels"] > 0:
+            out.append({"index": i, "name": d["name"], "api": apis[d["hostapi"]]["name"],
+                        "channels": d["max_input_channels"], "default": i == default_in})
+    return out
+
+
+def resolve_input(sd, spec):
+    """Device index for a spec: None (system default), an index, a name
+    (substring, as on the command line) or {"name", "api"} as saved by the page."""
+    if spec is None:
+        return None
+    if isinstance(spec, int) or (isinstance(spec, str) and spec.isdigit()):
+        return int(spec)
+    ins = list_inputs(sd)
+    if isinstance(spec, dict):
+        for d in ins:
+            if d["name"] == spec.get("name") and d["api"] == spec.get("api"):
+                return d["index"]
+        for d in ins:                        # same device under another API
+            if d["name"] == spec.get("name"):
+                return d["index"]
+        raise ValueError(f"audio input '{spec.get('name')}' ({spec.get('api')}) not found")
+    want = str(spec).lower()
+    for d in ins:
+        if f"{d['name']} {d['api']}".lower() == want or d["name"].lower() == want:
+            return d["index"]
+    for d in ins:
+        if want in f"{d['name']} {d['api']}".lower():
+            return d["index"]
+    raise ValueError(f"audio input '{spec}' not found")
+
+
 class LiveCapture:
-    """Sound-card input -> decimator -> detector, on its own thread."""
+    """Sound-card input -> decimator -> detector, on its own thread.
+
+    The input can be changed while running (request_device); the stream is
+    reopened and a fresh detector made for the new sample rate.
+    """
 
     def __init__(self, detector_factory, device=None, channel: int = 0,
                  samplerate: float | None = None, log=print):
         import sounddevice as sd
         self.sd = sd
-        info = sd.query_devices(device, "input")
-        self.sr = float(samplerate or info["default_samplerate"])
-        self.channels = max(channel + 1, 1)
-        if self.channels > info["max_input_channels"]:
-            raise ValueError(f"device has only {info['max_input_channels']} input channel(s)")
-        self.channel = channel
-        self.device = device
-        self.dec = dsp.Decimator(self.sr)
-        self.detector = detector_factory(self.dec.fs)
+        self.factory = detector_factory
+        self.want_channel = channel
+        self.want_sr = samplerate
+        self.log = log
         self.q: "collections.deque[tuple]" = collections.deque()
         self.ev = threading.Event()
         self.running = False
         self.overflows = 0
         self.overflow_events: "collections.deque[str]" = collections.deque(maxlen=50)
-        self.log = log
-        self.log(f"input: {info['name']} @ {self.sr:.0f} Hz, channel {channel} "
+        self.detector = None
+        self.dev_index = None
+        self.info: dict | None = None
+        self.error: str | None = None
+        self.streaming = False
+        self._req = _UNSET
+        if not self._configure(device) and device is not None:
+            self.log("audio: falling back to the system default input")
+            self._configure(None)
+
+    # ------------------------------------------------------------------
+    def _configure(self, spec) -> bool:
+        sd = self.sd
+        try:
+            idx = resolve_input(sd, spec)
+            info = sd.query_devices(idx, "input") if idx is not None else sd.query_devices(kind="input")
+            if idx is None:
+                idx = sd.default.device[0] if sd.default.device[0] is not None and sd.default.device[0] >= 0 else None
+        except Exception as e:
+            self.error = f"{e}"
+            self.log(f"audio: {e}")
+            return False
+        nin = int(info["max_input_channels"])
+        self.channel = min(self.want_channel, max(0, nin - 1))
+        self.channels = self.channel + 1
+        self.sr = float(self.want_sr or info["default_samplerate"])
+        self.dec = dsp.Decimator(self.sr)
+        old = self.detector
+        if old is not None and old.state == "receiving":
+            old.flush()                       # decode what was received so far
+        self.detector = self.factory(self.dec.fs)
+        if old is not None:
+            self.detector.watch = old.watch
+        self.dev_index, self.info, self.error = idx, info, None
+        try:
+            api = self.sd.query_hostapis()[info["hostapi"]]["name"]
+        except Exception:
+            api = ""
+        self.current = {"name": info["name"], "api": api}
+        self.log(f"input: {info['name']} ({api}) @ {self.sr:.0f} Hz, channel {self.channel} "
                  f"-> internal {self.dec.fs:.0f} Hz")
+        return True
+
+    def request_device(self, spec):
+        """Switch input (done on the capture thread)."""
+        self._req = spec
+        self.ev.set()
 
     def _cb(self, indata, frames, t, status):
         now = time.perf_counter()          # high-resolution PC clock (the flywheel)
@@ -318,20 +405,47 @@ class LiveCapture:
 
     def run(self):
         self.running = True
-        with self.sd.InputStream(device=self.device, channels=self.channels,
-                                 samplerate=self.sr, dtype="float32",
-                                 blocksize=int(self.sr * 0.1), latency="high", callback=self._cb):
-            while self.running:
-                self.ev.wait(0.5)
-                self.ev.clear()
-                while self.q:
-                    data, tstamp, ovf = self.q.popleft()
-                    self.detector.feed(self.dec.process(data), tstamp, ovf)
-                while self.overflow_events:
-                    ts = self.overflow_events.popleft()
-                    self.log(f"[{ts}] WARNING: audio input overflow - samples lost (this tears the fax)")
-                    if self.detector.state == "receiving":
-                        self.detector.rec_meta["audio_overflows"] = self.detector.rec_meta.get("audio_overflows", 0) + 1
+        warned = None
+        while self.running:
+            if self._req is not _UNSET:
+                spec, self._req = self._req, _UNSET
+                self.q.clear()
+                self._configure(spec)
+                warned = None
+            if self.info is None:
+                time.sleep(0.5)
+                continue
+            try:
+                with self.sd.InputStream(device=self.dev_index, channels=self.channels,
+                                         samplerate=self.sr, dtype="float32",
+                                         blocksize=int(self.sr * 0.1), latency="high", callback=self._cb):
+                    self.streaming, self.error, warned = True, None, None
+                    while self.running and self._req is _UNSET:
+                        self.ev.wait(0.5)
+                        self.ev.clear()
+                        while self.q:
+                            data, tstamp, ovf = self.q.popleft()
+                            self.detector.feed(self.dec.process(data), tstamp, ovf)
+                        while self.overflow_events:
+                            ts = self.overflow_events.popleft()
+                            self.log(f"[{ts}] WARNING: audio input overflow - samples lost (this tears the fax)")
+                            if self.detector.state == "receiving":
+                                self.detector.rec_meta["audio_overflows"] = \
+                                    self.detector.rec_meta.get("audio_overflows", 0) + 1
+            except Exception as e:
+                self.error = f"{e.__class__.__name__}: {e}"
+                if warned != self.error:
+                    self.log(f"audio: cannot open {self.info['name']} ({self.error}) - retrying")
+                    warned = self.error
+                for _ in range(15):
+                    if self._req is not _UNSET or not self.running:
+                        break
+                    time.sleep(0.2)
+            finally:
+                self.streaming = False
+
+    def status(self) -> dict:
+        return {"current": getattr(self, "current", None), "streaming": self.streaming, "error": self.error}
 
     def stop(self):
         self.running = False

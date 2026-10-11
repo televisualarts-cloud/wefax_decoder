@@ -24,6 +24,7 @@ class Hub:
         self.cat = None            # cat.CatReader
         self.settings = {"station": None}
         self.auto = None           # autosched.AutoScheduler
+        self.capture = None        # frontend.LiveCapture (live mode only)
         self.live_info: dict = {}
 
     # ---- small persistent settings file shared with the scheduler
@@ -107,6 +108,13 @@ def make_handler(hub: Hub):
                 body = json.loads(self.rfile.read(n) or b"{}") if n else {}
             except Exception:
                 return self._send(400, b'{"error":"bad json"}', "application/json")
+            if path == "/api/audio":
+                if hub.capture is None:
+                    return self._send(409, b'{"error":"no live audio in file mode"}', "application/json")
+                spec = {"name": body.get("name"), "api": body.get("api")} if body.get("name") else None
+                hub.capture.request_device(spec)
+                hub.save_setting("audio_device", spec)
+                return self._send(200, json.dumps({"ok": True}).encode(), "application/json")
             if path == "/api/catport":
                 if hub.cat is None:
                     return self._send(409, b'{"error":"no CAT in file mode"}', "application/json")
@@ -192,6 +200,18 @@ def make_handler(hub: Hub):
                 from datetime import datetime, timezone
                 rows = hub.auto.proplog.summary(hub.auto.planner.qth, datetime.now(timezone.utc)) if hub.auto else []
                 self._send(200, json.dumps(rows).encode(), "application/json")
+            elif path == "/api/audio":
+                if hub.capture is None:
+                    return self._send(200, json.dumps({"available": False}).encode(), "application/json")
+                from .frontend import list_inputs
+                devs = []
+                if "list=0" not in self.path:
+                    try:
+                        devs = list_inputs(hub.capture.sd)
+                    except Exception:
+                        pass
+                st = hub.capture.status()
+                self._send(200, json.dumps({"available": True, "devices": devs, **st}).encode(), "application/json")
             elif path == "/api/ports":
                 from .cat import list_ports
                 cur = hub.cat.port if hub.cat else None
