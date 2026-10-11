@@ -15,10 +15,23 @@ import time
 from datetime import datetime, timezone
 
 RX_LETTERS = "ABCDEF"
+_UNSET = object()
+
+
+def list_ports() -> list[dict]:
+    """COM ports Windows (or Linux) knows about, including virtual pairs."""
+    try:
+        from serial.tools import list_ports as lp
+    except ImportError:
+        return []
+    out = []
+    for p in sorted(lp.comports(), key=lambda p: (len(p.device), p.device)):
+        out.append({"port": p.device, "desc": (p.description or "").strip()})
+    return out
 
 
 class CatReader:
-    def __init__(self, port: str, baud: int = 57600, rx: int = 1, poll_s: float = 1.0, log=print):
+    def __init__(self, port: str | None, baud: int = 57600, rx: int = 1, poll_s: float = 1.0, log=print):
         self.port, self.baud, self.poll_s, self.log = port, baud, poll_s, log
         self.letter = RX_LETTERS[max(1, min(6, rx)) - 1]
         self.freq_hz: int | None = None
@@ -30,7 +43,16 @@ class CatReader:
         self._lock = threading.Lock()
         self._stop = False
         self._pending: list[bytes] = []
+        self._new_port = _UNSET
         threading.Thread(target=self._run, daemon=True).start()
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.port)
+
+    def set_port(self, port: str | None):
+        """Switch to another COM port (None = CAT off); done on the polling thread."""
+        self._new_port = port or None
 
     # ------------------------------------------------------------------
     def _open(self):
@@ -56,9 +78,27 @@ class CatReader:
             return None
         return s
 
+    def _close(self):
+        self.connected = False
+        if self._ser is not None:
+            try:
+                self._ser.close()
+            except Exception:
+                pass
+            self._ser = None
+
     def _run(self):
         warned = False
         while not self._stop:
+            if self._new_port is not _UNSET:
+                port, self._new_port = self._new_port, _UNSET
+                self._close()
+                self.port, self.freq_hz, self.mode, self.smeter = port, None, None, None
+                warned = False
+                self.log(f"CAT: port set to {port}" if port else "CAT: off")
+            if not self.port:
+                time.sleep(0.3)
+                continue
             try:
                 if self._ser is None:
                     self._open()
@@ -79,17 +119,14 @@ class CatReader:
                 if r and r.startswith("SM") and r[2:-1].isdigit():
                     self.smeter = int(r[2:-1][-4:])
             except Exception as e:
-                self.connected = False
-                if self._ser is not None:
-                    try:
-                        self._ser.close()
-                    except Exception:
-                        pass
-                    self._ser = None
+                self._close()
                 if not warned:
                     self.log(f"CAT: no connection on {self.port} ({e.__class__.__name__}: {e}) - retrying")
                     warned = True
-                time.sleep(5)
+                for _ in range(25):            # retry in 5 s, sooner if the port is changed
+                    if self._new_port is not _UNSET or self._stop:
+                        break
+                    time.sleep(0.2)
                 continue
             time.sleep(self.poll_s)
 
@@ -126,7 +163,7 @@ class CatReader:
         return False
 
     def status(self) -> dict:
-        return {"cat": self.connected,
+        return {"cat": self.connected, "cat_port": self.port,
                 "dial_khz": None if self.freq_hz is None else round(self.freq_hz / 1000.0, 2),
                 "usb": self.mode == 2 if self.mode is not None else None}
 

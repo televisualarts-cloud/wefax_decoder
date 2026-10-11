@@ -584,7 +584,7 @@ class AutoScheduler:
             if it.state == "closing" and (it.result is not None or time.time() - it.close_t > 150):
                 it.state = "done"
                 self._log_item(it, it.result["quality"] if it.result else 0.0)
-        if not self.enabled or time.time() < self.paused_until or self.cat is None:
+        if not self.enabled or time.time() < self.paused_until or self.cat is None or not self.cat.enabled:
             return
         # next item due
         due = next((i for i in items if i.state == "planned"

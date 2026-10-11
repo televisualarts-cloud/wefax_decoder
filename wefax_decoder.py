@@ -358,15 +358,20 @@ def main():
     sched = Schedules()
     log.info("schedules: %d stations loaded", len(sched.stations))
     cat = None
-    if args.cat:
+    if not args.wav:
+        # the port chosen on the page (saved in faxes/settings.json) wins over --cat
         from wefax.cat import CatReader
-        cat = CatReader(args.cat, args.cat_baud, args.cat_rx, log=log.info)
+        saved = hub.load_settings().get("cat_port", "unset")
+        port = args.cat if saved == "unset" else saved
+        if saved != "unset" and args.cat and saved != args.cat:
+            log.info("CAT: using %s chosen on the page (start option said %s)", saved or "off", args.cat)
+        cat = CatReader(port, args.cat_baud, args.cat_rx, log=log.info)
     from wefax.autosched import AutoScheduler
     qth = tuple(float(v) for v in args.qth.split(","))
-    auto = AutoScheduler(sched, cat, out, qth, enabled=bool(args.auto and cat), dx=not args.no_dx,
-                         log=log.info)
-    if args.auto and not cat:
-        log.info("auto-schedule needs --cat to tune SDR Console - left off")
+    auto = AutoScheduler(sched, cat, out, qth, enabled=bool(args.auto and cat and cat.enabled),
+                         dx=not args.no_dx, log=log.info)
+    if args.auto and not (cat and cat.enabled):
+        log.info("auto-schedule needs a CAT port to tune SDR Console - left off")
     hub.sched, hub.cat, hub.auto = sched, cat, auto
     hub.settings["station"] = args.station
     proc = Processor(out, hub, args, sched, cat)

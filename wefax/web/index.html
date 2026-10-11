@@ -14,7 +14,7 @@
   [hidden] { display: none !important; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
     font: 16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  header { display: flex; align-items: center; gap: 16px; padding: 10px 16px;
+  header { display: flex; align-items: center; gap: 14px; padding: 10px 16px;
     border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
   h1 { font: 600 17px var(--mono); letter-spacing: .12em; margin: 0; color: #e8eef4; }
   .pill { font: 600 14px var(--mono); padding: 3px 10px; border-radius: 999px;
@@ -27,18 +27,21 @@
   #clock { color: #ffffff; font-size: 18px; }
   .prio { display: flex; align-items: center; gap: 6px; font: 14px var(--mono); color: var(--dim); white-space: nowrap; }
   .prio select { font: 600 14px var(--mono); color: #ffffff; background: #171c23; border: 1px solid var(--line);
-    border-radius: 4px; padding: 3px 6px; max-width: 200px; }
+    border-radius: 4px; padding: 3px 6px; max-width: 240px; }
   .prio select:disabled { opacity: .45; }
   /* fixed-width slots so changing readings don't shift the rest of the line */
   #lvltxt { display: inline-block; width: 9ch; text-align: right; white-space: nowrap; }
   #sig { width: 20ch; white-space: nowrap; overflow: hidden; }
-  #tuned { border-left: 1px solid var(--line); padding-left: 16px; white-space: nowrap; }
+  #tuned { border-left: 1px solid var(--line); padding-left: 16px; white-space: nowrap;
+    flex: 1 1 0; min-width: 160px; overflow: hidden; text-overflow: ellipsis; display: block; }
   #tuned:empty { border-left: 0; }
   .bar { width: 120px; height: 6px; background: #1b222a; border-radius: 3px; overflow: hidden; }
   .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
   .spacer { flex: 1; }
   body { display: flex; flex-direction: column; }
   header { flex: 0 0 auto; }
+  .setbar { flex: 0 0 auto; display: flex; justify-content: flex-end; align-items: center; gap: 18px;
+    flex-wrap: wrap; padding: 5px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
   .page { display: grid; grid-template-columns: 210px 1fr; flex: 1 1 auto; min-height: 0; }
   main { display: grid; grid-template-rows: auto auto 1fr; height: 100%; min-width: 0; min-height: 0; }
   aside { display: flex; flex-direction: column; min-height: 0; background: var(--panel);
@@ -62,6 +65,9 @@
   .sched #selStation { max-width: 600px; }
   .sched #selFreq { max-width: 440px; }
   .sched #bTune { font-size: 22px; padding: 8px 18px; }
+  .prio #selCat { border-width: 2px; max-width: 300px; }
+  .prio #selCat.ok { border-color: var(--rx); }
+  .prio #selCat.bad { border-color: var(--bad); }
   .sched button:disabled, .toolbar button:disabled { opacity: .45; cursor: default; }
   .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-left: 6px; }
   .chip { font: 13px var(--mono); padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px;
@@ -127,11 +133,13 @@
   <span class="meter">IN <span class="bar"><i id="lvl"></i></span><span id="lvltxt">-- dBFS</span></span>
   <span class="meter" id="sig"></span>
   <span class="meter" id="tuned"></span>
-  <span class="spacer"></span>
-  <label class="prio">1st priority <select id="selP1"></select></label>
-  <label class="prio">2nd priority <select id="selP2"></select></label>
   <span class="meter" id="clock"></span>
 </header>
+<div class="setbar">
+  <label class="prio">CAT port <select id="selCat" title="SDR Console CAT (TS-2000) COM port"></select></label>
+  <label class="prio">1st priority <select id="selP1"></select></label>
+  <label class="prio">2nd priority <select id="selP2"></select></label>
+</div>
 <div class="page">
 <aside>
   <div class="livewrap">
@@ -410,6 +418,11 @@ function tuned(s) {
 }
 function status(s) {
   tuned(s); followRadio(s);
+  if (s.cat !== undefined && document.activeElement !== $('selCat')) {
+    const was = $('selCat').classList.contains('ok');
+    if ((s.cat_port || null) !== catCur) loadPorts(); else paintCat(s.cat);
+    if (was !== !!s.cat) { loadStations(); }
+  }
   lastStatus = s; paintLive();
   lastState = s.state;
   const p = $('state');
@@ -491,6 +504,35 @@ async function loadStations() {
   $('bTune').disabled = !catOn;
   $('bTune').title = catOn ? 'Retune SDR Console' : 'Start the decoder with --cat COMx to enable tuning';
 }
+// ---- SDR Console CAT port
+let catCur = null;
+async function loadPorts() {
+  try {
+    const j = await (await fetch('/api/ports')).json();
+    if (!j.available) { $('selCat').disabled = true; $('selCat').innerHTML = '<option>file mode</option>'; return; }
+    catCur = j.current;
+    $('selCat').innerHTML = '<option value="">(off)</option>' + j.ports.map(p =>
+      `<option value="${esc(p.port)}">${esc(p.port)}${p.desc ? ' \u2013 ' + esc(p.desc) : ''}</option>`).join('');
+    $('selCat').value = catCur || '';
+    paintCat(j.connected);
+  } catch (e) {}
+}
+function paintCat(connected) {
+  const el = $('selCat');
+  el.classList.toggle('ok', !!catCur && connected);
+  el.classList.toggle('bad', !!catCur && !connected);
+  el.title = !catCur ? 'CAT off - choose the COM port paired with SDR Console'
+    : (connected ? `SDR Console connected on ${catCur}` : `No answer from SDR Console on ${catCur}`);
+}
+$('selCat').addEventListener('mousedown', () => { if (document.activeElement !== $('selCat')) loadPorts(); });
+$('selCat').onchange = async () => {
+  catCur = $('selCat').value || null;
+  await fetch('/api/catport', {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({port: catCur})});
+  paintCat(false);
+  setTimeout(() => { loadStations(); loadPlan(); }, 2500);
+};
+
 // ---- 1st / 2nd priority stations for the auto-scheduler
 function fillPriorities(pri) {
   const shorts = [...new Set(stations.map(x => x.short))].sort((a, b) => a.localeCompare(b));
@@ -534,6 +576,7 @@ function followRadio(s) {        // keep the pickers in step with SDR Console
 }
 setInterval(fillUpcoming, 30000);
 loadStations();
+loadPorts();
 // ---------------- auto-scheduler ----------------
 async function loadPlan() {
   let j;

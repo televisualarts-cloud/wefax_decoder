@@ -89,7 +89,7 @@ Everything is written under `./faxes/` (change this with `--out`):
 | `thumbs/<name>.jpg` | Thumbnail for the page |
 | `<name>.json` | Decode details: station and chart, IOC, LPM, AFC, clock ppm, quality, tears, etc. |
 | `proplog.jsonl` | The auto-scheduler's log of every attempt (SNR, quality) |
-| `settings.json` | Your 1st and 2nd priority stations |
+| `settings.json` | Your CAT port and 1st/2nd priority stations |
 
 Audio is not kept unless you add `--save-audio`.
 
@@ -102,9 +102,11 @@ a Kenwood TS-2000 CAT port:
    example COM3 and COM4.
 2. In SDR Console, go to Home > Serial Port (CAT) and add one end, such as
    COM3, at 57600 baud.
-3. Start the decoder on the other end, for example
-   `python wefax_decoder.py --cat COM4`. Add `--cat-rx 2` to follow
-   receiver 2.
+3. Choose the other end of the pair, for example COM4, in the **CAT port**
+   box at the top of the page. The border turns green when SDR Console
+   answers, and the choice is saved. You can also give the port at start-up
+   with `--cat COM4`; a port chosen on the page takes precedence. Add
+   `--cat-rx 2` to follow receiver 2.
 
 `python tools/comtest.py` checks the COM ports if CAT does not respond.
 Without CAT, tell the decoder which station you are on with

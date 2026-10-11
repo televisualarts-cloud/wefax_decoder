@@ -26,6 +26,28 @@ class Hub:
         self.auto = None           # autosched.AutoScheduler
         self.live_info: dict = {}
 
+    # ---- small persistent settings file shared with the scheduler
+    @property
+    def settings_path(self) -> Path:
+        return self.out_dir / "settings.json"
+
+    def load_settings(self) -> dict:
+        try:
+            return json.loads(self.settings_path.read_text())
+        except Exception:
+            return {}
+
+    def save_setting(self, key, value):
+        d = self.load_settings()
+        d[key] = value
+        try:
+            self.settings_path.write_text(json.dumps(d, indent=1))
+        except Exception:
+            pass
+
+    def cat_on(self) -> bool:
+        return self.cat is not None and self.cat.enabled
+
     def publish(self, kind: str, data: dict):
         if kind == "status":
             self.last_status = data
@@ -85,9 +107,18 @@ def make_handler(hub: Hub):
                 body = json.loads(self.rfile.read(n) or b"{}") if n else {}
             except Exception:
                 return self._send(400, b'{"error":"bad json"}', "application/json")
-            if path == "/api/tune":
+            if path == "/api/catport":
                 if hub.cat is None:
-                    return self._send(409, json.dumps({"error": "CAT not enabled - start with --cat COMx"}).encode(),
+                    return self._send(409, b'{"error":"no CAT in file mode"}', "application/json")
+                port = body.get("port") or None
+                hub.cat.set_port(port)
+                hub.save_setting("cat_port", port)
+                if not port and hub.auto is not None and hub.auto.enabled:
+                    hub.auto.set_enabled(False)
+                return self._send(200, json.dumps({"ok": True, "port": port}).encode(), "application/json")
+            if path == "/api/tune":
+                if not hub.cat_on():
+                    return self._send(409, json.dumps({"error": "no CAT port - choose one in the CAT box"}).encode(),
                                       "application/json")
                 try:
                     khz = float(body["khz"])            # assigned frequency
@@ -113,8 +144,8 @@ def make_handler(hub: Hub):
                 if hub.auto is None:
                     return self._send(409, b'{"error":"no scheduler"}', "application/json")
                 on = bool(body.get("on"))
-                if on and hub.cat is None:
-                    return self._send(409, json.dumps({"error": "needs CAT - start with --cat COMx"}).encode(),
+                if on and not hub.cat_on():
+                    return self._send(409, json.dumps({"error": "needs a CAT port - choose one in the CAT box"}).encode(),
                                       "application/json")
                 hub.auto.set_enabled(on)
                 return self._send(200, json.dumps(hub.auto.status()).encode(), "application/json")
@@ -150,17 +181,26 @@ def make_handler(hub: Hub):
                                            for k, g in st.groups]})
                 pri = hub.auto.priorities if hub.auto else ["Northwood", "DWD"]
                 out.sort(key=lambda d: (d["short"] not in pri, d["name"]))
-                self._send(200, json.dumps({"stations": out, "cat": hub.cat is not None,
+                self._send(200, json.dumps({"stations": out, "cat": hub.cat_on(),
                                             "priorities": hub.auto.priorities if hub.auto else None,
                                             "station": hub.settings.get("station")}).encode(), "application/json")
             elif path == "/api/plan":
                 st = hub.auto.status() if hub.auto else {"enabled": False, "plan": []}
-                st["cat"] = hub.cat is not None
+                st["cat"] = hub.cat_on()
                 self._send(200, json.dumps(st).encode(), "application/json")
             elif path == "/api/proplog":
                 from datetime import datetime, timezone
                 rows = hub.auto.proplog.summary(hub.auto.planner.qth, datetime.now(timezone.utc)) if hub.auto else []
                 self._send(200, json.dumps(rows).encode(), "application/json")
+            elif path == "/api/ports":
+                from .cat import list_ports
+                cur = hub.cat.port if hub.cat else None
+                ports = list_ports()
+                if cur and cur not in [p["port"] for p in ports]:
+                    ports.append({"port": cur, "desc": "not found"})
+                self._send(200, json.dumps({"ports": ports, "current": cur,
+                                            "connected": bool(hub.cat and hub.cat.connected),
+                                            "available": hub.cat is not None}).encode(), "application/json")
             elif path == "/api/status":
                 self._send(200, json.dumps(hub.last_status).encode(), "application/json")
             elif path.startswith("/faxes/"):
