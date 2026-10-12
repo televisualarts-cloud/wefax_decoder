@@ -309,6 +309,7 @@ class Item:
 
     def to_json(self):
         return {"start": self.start.strftime("%H:%MZ"), "end": self.end.strftime("%H:%MZ"),
+                "start_ts": self.start.timestamp(),
                 "station": self.short, "khz": self.khz, "dial": self.dial, "contents": self.contents,
                 "valid": self.valid, "kind": self.kind, "state": self.state, "score": round(self.score, 2)}
 

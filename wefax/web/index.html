@@ -71,6 +71,11 @@
   .prio #selAudio.bad { border-color: var(--bad); }
   .prio #selCat.ok { border-color: var(--rx); }
   .prio #selCat.bad { border-color: var(--bad); }
+  #nextBig { font: 600 20px var(--mono); color: #fff; padding: 2px 12px; border: 1px solid var(--line);
+    border-radius: 6px; background: #141a21; white-space: nowrap; }
+  #nextBig b { color: var(--cyan); font-size: 24px; margin-left: 10px; }
+  #nextBig.soon b { color: var(--busy); }
+  #nextBig small { font-size: 13px; color: var(--dim); font-weight: 400; margin-left: 8px; }
   .sched button:disabled, .toolbar button:disabled { opacity: .45; cursor: default; }
   .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-left: 6px; }
   .chip { font: 13px var(--mono); padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px;
@@ -166,6 +171,7 @@
     <div style="flex-basis:100%;height:0"></div>
     <button id="bAuto" title="Auto-schedule: tune SDR Console to the most important Northwood/DWD charts, DX in the gaps">AUTO</button>
     <span id="autoMsg"></span>
+    <span id="nextBig" hidden></span>
     <span>PLAN</span><div class="chips" id="plan"></div>
   </div>
   <div class="toolbar">
@@ -505,6 +511,8 @@ async function loadStations() {
   const pre = j.station && stations.find(x => x.short.toLowerCase() === j.station.toLowerCase() || x.name.toLowerCase().includes(j.station.toLowerCase()));
   if (pre) selS.value = pre.name;
   fillFreqs(); fillUpcoming();
+  curDial = null;                       // pickers were rebuilt: line them up with the radio again
+  if (lastStatus && Date.now() - touched >= 60000) followRadio(lastStatus);
   $('bTune').disabled = !catOn;
   $('bTune').title = catOn ? 'Retune SDR Console' : 'Start the decoder with --cat COMx to enable tuning';
 }
@@ -620,9 +628,30 @@ loadStations();
 loadPorts();
 loadAudio(true);
 // ---------------- auto-scheduler ----------------
+let planCache = null;
+function tickNext() {
+  const el = $('nextBig');
+  const j = planCache;
+  if (!j || !j.enabled) { el.hidden = true; return; }
+  const now = Date.now() / 1000;
+  const nx = (j.plan || []).find(x => x.state === 'planned' && x.start_ts > now - 60);
+  if (!nx) { el.hidden = true; return; }
+  el.hidden = false;
+  const left = Math.round(nx.start_ts - now);
+  let t;
+  if (left > 0) {
+    const h = Math.floor(left / 3600), m = Math.floor(left % 3600 / 60), s = left % 60;
+    t = (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0');
+  } else t = lastStatus && lastStatus.state === 'receiving' ? 'waiting' : 'now';
+  el.classList.toggle('soon', left <= 120);
+  el.title = `${nx.station} ${nx.khz} kHz (dial ${nx.dial}) - ${nx.contents}`;
+  el.innerHTML = `NEXT ${esc(nx.start)} ${esc(nx.station)} <b>${t}</b><small>${esc(nx.khz)} kHz \u00B7 ${esc(nx.contents)}</small>`;
+}
+setInterval(tickNext, 1000);
 async function loadPlan() {
   let j;
   try { j = await (await fetch('/api/plan')).json(); } catch (e) { return; }
+  planCache = j; tickNext();
   const b = $('bAuto');
   b.classList.toggle('on', !!j.enabled);
   b.textContent = j.enabled ? 'AUTO ON' : 'AUTO OFF';

@@ -111,7 +111,7 @@ def main():
             v[m] = 0
         elif kind == "phasing":
             ph = (tt / Tl) % 1.0
-            v[m] = ((ph < 0.025) | (ph > 0.975))      # 5 % pulse centred on line start
+            v[m] = (ph > 0.95)                         # 5 % white pulse ending at the line start
         elif kind == "image":
             line = np.floor(tt / Tl).astype(int)
             px = np.floor(((tt / Tl) % 1.0) * W).astype(int)

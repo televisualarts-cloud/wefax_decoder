@@ -481,7 +481,7 @@ def trailing_signal_end(audio, fs, s_end, log=print, win_s=10.0, thresh=6.0):
     return s_end
 
 
-def trim_edges(img, cimg, max_top=40, max_bot=12):
+def trim_edges(img, cimg, max_top=40, max_bot=12, align="end"):
     """Remove phasing lines left at the top and stop-tone lines at the bottom.
 
     Phasing line: black across the picture with the white phasing pulse at
@@ -491,18 +491,29 @@ def trim_edges(img, cimg, max_top=40, max_bot=12):
     K, W = img.shape
     centre = img[:, int(0.06 * W):int(0.94 * W)]
     dark = (centre < 0.4).mean(1)
-    # the phasing pulse is 5 % of a line, centred on the line start: a white
-    # run of ~2.5 % of the width at the left and/or right edge (45 px of 1810).
+    # the phasing pulse is 5 % of a line just before the line start: a white
+    # run of ~5 % at the right edge (or ~2.5 % at each edge with --align center).
     # A chart's white margin is a different width, so frame lines stay.
     pw = 0.025 * W
 
     def edge_run(row, rev):
-        b = row[::-1] if rev else row
-        w = np.argmin(b > 0.5) if not (b > 0.5).all() else len(b)
-        return w
+        """Width of the white run at one edge (a couple of soft edge pixels allowed)."""
+        w = (row[::-1] if rev else row) > 0.5
+        s0 = next((i for i in range(4) if w[i]), None)
+        if s0 is None:
+            return 0
+        rest = w[s0:]
+        return s0 + (int(np.argmin(rest)) if not rest.all() else len(rest))
 
     def pulsed(i):
-        return dark[i] >= 0.8 and any(0.75 * pw <= edge_run(img[i], r) <= 1.25 * pw for r in (False, True))
+        if dark[i] < 0.8:
+            return False
+        lr, rr = edge_run(img[i], False), edge_run(img[i], True)
+        if align == "end":        # whole pulse at the right end, nothing at the left
+            return 1.6 * pw <= rr <= 2.5 * pw and lr <= 0.5 * pw
+        if align == "start":
+            return 1.6 * pw <= lr <= 2.5 * pw and rr <= 0.5 * pw
+        return any(0.75 * pw <= r <= 1.25 * pw for r in (lr, rr))
 
     top = 0
     for i in range(min(max_top, K // 4)):
@@ -522,7 +533,7 @@ def trim_edges(img, cimg, max_top=40, max_bot=12):
 
 
 def decode_recording(audio: np.ndarray, fs: float, ioc=None, lpm=None,
-                     align: str = "center", log=print, timeline=None) -> dict:
+                     align: str = "end", log=print, timeline=None) -> dict:
     audio = np.asarray(audio, np.float64)
     audio, gaps = fill_gaps(audio, fs, timeline, log)
     audio = audio - audio.mean()
@@ -639,7 +650,7 @@ def decode_recording(audio: np.ndarray, fs: float, ioc=None, lpm=None,
 
     # 8. tears: sudden sideways jumps from lost / extra audio samples
     from .realign import find_tears, apply_tears
-    img, cimg, top, bot = trim_edges(img, cimg)
+    img, cimg, top, bot = trim_edges(img, cimg, align=align)
     if top or bot:
         log(f"edges: {top} phasing line(s) removed at the top, {bot} stop-tone/blank line(s) at the bottom")
     K = img.shape[0]

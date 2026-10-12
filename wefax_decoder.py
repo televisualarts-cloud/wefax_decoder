@@ -339,8 +339,9 @@ def main():
                          "chart: hard black/white; greyscale: satellite pictures")
     ap.add_argument("--ioc", type=int, choices=(288, 576), help="override IOC")
     ap.add_argument("--lpm", type=int, choices=(60, 90, 120, 240), help="override lines/minute")
-    ap.add_argument("--align", choices=("center", "start", "end"), default="center",
-                    help="x=0 at the centre/start/end of the phasing pulse")
+    ap.add_argument("--align", choices=("center", "start", "end"), default="end",
+                    help="line start at the end of the phasing pulse (default; what stations transmit), "
+                         "its centre, or its start")
     ap.add_argument("--max-minutes", type=float, default=40.0)
     ap.add_argument("--save-audio", action="store_true", help="also keep each transmission as WAV")
     ap.add_argument("--cat", metavar="COMx", help="SDR Console CAT (TS-2000) port, to read the frequency")
