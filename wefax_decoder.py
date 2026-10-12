@@ -47,16 +47,32 @@ def parse_utc(text):
         return None
 
 
-def identify(sched, cat, station, utc_text):
-    """Which chart is this?  Station from the SDR Console frequency (CAT) or
-    --station, chart from the schedule slot nearest the start time."""
+def identify(sched, cat, station, utc_text, auto=None):
+    """Which chart is this?
+
+    1. The auto-scheduler's plan: if it had tuned for a chart and the
+       reception started inside that chart's slot, that is the chart - unless
+       CAT shows the radio was clearly somewhere else that has a chart then.
+    2. Otherwise the SDR Console frequency (CAT) at the start time, or the
+       station picker, and the schedule slot nearest the start time.
+    """
     if sched is None or not utc_text:
         return None
     when = parse_utc(utc_text)
     if when is None:
         return None
     dial = cat.dial_khz_at(when) if cat else None
-    return sched.identify(when, dial, station)
+    p = sched.identify(when, dial, station)
+    it = auto.item_at(when) if auto is not None else None
+    if it is not None:
+        ip = {"station": it.station, "short": it.short, "khz": it.khz, "slot": it.slot,
+              "contents": it.contents, "valid": it.valid}
+        if dial is None or abs(dial - it.dial) <= 1.5 or not (p and p.get("slot")):
+            if dial is not None and abs(dial - it.dial) > 1.5:
+                log.info("chart: CAT read %.1f kHz but the scheduler had tuned %s %.1f kHz - using the plan",
+                         dial, it.short, it.dial)
+            return ip
+    return p
 
 
 def expected_now(sched, cat, station, auto, now=None):
@@ -194,7 +210,8 @@ class Processor:
         img, conf = res["image"], res["conf"]
         enh, einfo = enhance.enhance(img, conf, scale=a.scale, use_ml=not a.no_ml,
                                      mode=a.mode, log=log.info)
-        product = identify(self.sched, self.cat, self.hub.settings.get("station"), meta.get("utc"))
+        product = identify(self.sched, self.cat, self.hub.settings.get("station"), meta.get("utc"),
+                           getattr(self, "auto", None))
         if product:
             log.info("chart: %s", describe(product))
         if meta.get("name"):
@@ -344,6 +361,11 @@ def main():
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    # keep a log file as well as the console (faxes/wefax.log, 3 x 2 MB)
+    from logging.handlers import RotatingFileHandler
+    fh = RotatingFileHandler(out / "wefax.log", maxBytes=2_000_000, backupCount=3, encoding="utf-8")
+    fh.setFormatter(logging.Formatter("%(asctime)s  %(message)s", "%Y-%m-%d %H:%M:%S"))
+    logging.getLogger().addHandler(fh)
     organise_existing(out)
     hub = server.Hub(out)
     try:

@@ -630,6 +630,16 @@ class AutoScheduler:
         self.logf(f"auto: logged {it.short} {it.khz} kHz {it.slot}Z  SNR "
                   f"{'--' if snr is None else f'{snr:+.0f} dB'}  quality {quality:.2f} ({verdict})")
 
+    def item_at(self, when: datetime):
+        """The plan item the scheduler had tuned for at this time (or None)."""
+        with self._lock:
+            items = list(self.items)
+        for it in items:
+            if it.state in ("tuned", "closing", "done") and \
+                    it.start - timedelta(seconds=180) <= when <= it.end + timedelta(seconds=60):
+                return it
+        return None
+
     # -------- for the web page
     def status(self) -> dict:
         now = self.clock()

@@ -141,7 +141,7 @@ class CatReader:
             if best is None or abs(ts - t) < abs(best[0] - t):
                 best = (ts, f)
         if best is None or abs(best[0] - t) > 120:
-            return None if self.freq_hz is None else self.freq_hz / 1000.0
+            return None          # no reading near that time: don't guess from the current one
         return best[1] / 1000.0
 
     def tune(self, khz: float, usb: bool = True):
