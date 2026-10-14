@@ -111,9 +111,15 @@ Everything is written under `./faxes/` (change this with `--out`):
 | `stations/<station>/<chart>.png` | The latest copy of each chart, e.g. `stations/Northwood/Surface-Analysis.png`. A newer issue replaces it; a repeat of the same issue only replaces it if it decoded better. The `.json` beside it gives its quality and time |
 | `<name>.json` | Decode details: station and chart, IOC, LPM, AFC, clock ppm, quality, tears, etc. |
 | `proplog.jsonl` | The auto-scheduler's log of every attempt (SNR, quality) |
-| `settings.json` | Your audio input, CAT port and 1st/2nd priority stations |
+| `settings.json` | Your audio input, CAT port, 1st/2nd priority stations and how many days to keep |
 
 Audio is not kept unless you add `--save-audio`.
+
+**How long faxes are kept:** choose 3, 7, 14 or 28 days in the **Keep** box at
+the top of the page (default 28; the choice is saved). Once a night, at the
+first quiet moment after 00:05 local time (nothing being received or decoded),
+older faxes are deleted from `raw/`, `enhanced/`, `thumbs/` and `audio/`. The
+`stations/` copies, the learning history and your settings are never deleted.
 
 ## SDR Console CAT
 
@@ -278,6 +284,8 @@ wefax/
   schedule.py             broadcast schedules and chart identification
   cat.py                  Kenwood TS-2000 CAT for SDR Console
   autosched.py            auto-scheduler, propagation model, learning log
+  housekeep.py            nightly deletion of faxes older than the Keep setting
+  label.py                title block on the enhanced charts
   server.py               web server and live updates
   web/index.html          the page
   data/                   OpenCPN WeatherFaxSchedules.xml (GPL-3.0, data)

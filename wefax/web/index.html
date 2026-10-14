@@ -152,6 +152,7 @@
   <label class="prio">CAT port <select id="selCat" title="SDR Console CAT (TS-2000) COM port"></select></label>
   <label class="prio">1st priority <select id="selP1"></select></label>
   <label class="prio">2nd priority <select id="selP2"></select></label>
+  <label class="prio">Keep <select id="selKeep" title="Faxes older than this are deleted in a quiet moment after midnight (the station copies are always kept)"></select></label>
 </div>
 <div class="page">
 <aside>
@@ -628,6 +629,20 @@ setInterval(fillUpcoming, 30000);
 loadStations();
 loadPorts();
 loadAudio(true);
+// ---------------- keep N days ----------------
+async function loadKeep() {
+  try {
+    const j = await (await fetch('/api/keep')).json();
+    $('selKeep').innerHTML = j.choices.map(d => `<option value="${d}">${d} days</option>`).join('');
+    $('selKeep').value = String(j.days);
+  } catch (e) {}
+}
+$('selKeep').onchange = async () => {
+  await fetch('/api/keep', {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({days: +$('selKeep').value})});
+  loadKeep();
+};
+loadKeep();
 // ---------------- auto-scheduler ----------------
 let planCache = null;
 function tickNext() {                    // large countdown to the next planned chart

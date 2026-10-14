@@ -166,6 +166,16 @@ def make_handler(hub: Hub):
                     return self._send(400, b'{"error":"unknown station"}', "application/json")
                 hub.auto.set_priorities(first, second)
                 return self._send(200, json.dumps(hub.auto.status()).encode(), "application/json")
+            if path == "/api/keep":
+                from .housekeep import KEEP_CHOICES
+                try:
+                    days = int(body.get("days"))
+                except Exception:
+                    days = None
+                if days not in KEEP_CHOICES:
+                    return self._send(400, b'{"error":"days must be 3, 7, 14 or 28"}', "application/json")
+                hub.save_setting("keep_days", days)
+                return self._send(200, json.dumps({"ok": True, "days": days}).encode(), "application/json")
             if path == "/api/station":
                 hub.settings["station"] = body.get("station") or None
                 return self._send(200, json.dumps({"ok": True, **hub.settings}).encode(), "application/json")
@@ -221,6 +231,10 @@ def make_handler(hub: Hub):
                 self._send(200, json.dumps({"ports": ports, "current": cur,
                                             "connected": bool(hub.cat and hub.cat.connected),
                                             "available": hub.cat is not None}).encode(), "application/json")
+            elif path == "/api/keep":
+                from .housekeep import keep_days, KEEP_CHOICES
+                self._send(200, json.dumps({"days": keep_days(hub.load_settings()),
+                                            "choices": KEEP_CHOICES}).encode(), "application/json")
             elif path == "/api/status":
                 self._send(200, json.dumps(hub.last_status).encode(), "application/json")
             elif path.startswith("/faxes/"):

@@ -30,6 +30,7 @@ import numpy as np
 from wefax import dsp, decode, enhance, server
 from wefax.schedule import Schedules, slug
 from wefax import label
+from wefax import housekeep
 from wefax.frontend import Detector, LiveCapture
 
 try:
@@ -507,6 +508,9 @@ def main():
                 log.info("watch error: %s", e)
             time.sleep(5)
     threading.Thread(target=watcher, daemon=True).start()
+    # nightly clean-up of old faxes (Keep box on the page), at a quiet moment
+    housekeep.start(out, hub, lambda: (cap.detector is None or cap.detector.state == "idle") and not proc.busy,
+                    log.info)
     log.info("listening - Ctrl+C to stop")
     try:
         cap.run()
