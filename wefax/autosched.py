@@ -75,6 +75,7 @@ MIN_CORE_IMPORTANCE = 10
 LEAD_S = 75          # tune this long before the slot
 TAIL_S = 45          # extra time after the expected end
 HOLD_MAX_S = 25 * 60  # a recording longer than any single chart is ended for the next planned one
+RETRY_BONUS = 2000   # repeat of a priority chart whose first try failed: beats any other chart
 GOOD_QUALITY = 0.6   # decode quality that counts as 'collected'
 HALF_LIFE_DAYS = 21  # learned results lose half their weight in this time
 PROBE_DAYS = 14      # re-check an alternative frequency not tried for this long
@@ -224,6 +225,10 @@ class PropLog:
 
     def is_collected(self, key: str) -> bool:
         return self.collected.get(key, -1) >= GOOD_QUALITY
+
+    def is_retry(self, key: str) -> bool:
+        """Tried already, but only a poor copy or nothing decoded."""
+        return -1 < self.collected.get(key, -1) < GOOD_QUALITY
 
     def backoff_until(self, short, khz, when) -> float:
         st = self.get(short, khz, when)
@@ -407,9 +412,13 @@ class Planner:
                     continue              # already have a good copy
                 n = seen_keys.count(key)  # later repeats are back-ups for the first
                 seen_keys.append(key)
-                khz, p = self._best_freq(st.short, khzs, start, explore=imp < 20)
+                # the first try at this chart was poor or not decoded: its next
+                # repeat goes ahead of everything else (on the best known frequency)
+                retry = n == 0 and self.log.is_retry(key)
+                khz, p = self._best_freq(st.short, khzs, start, explore=imp < 20 and not retry)
                 cands.append(Item(start, end, st.short, st.name, sl.hhmm, contents, valid, khz, "core",
-                                  self.core[st.short] + imp * 10 + 50 * p - 25 * n, key))
+                                  self.core[st.short] + imp * 10 + 50 * p - 25 * n + (RETRY_BONUS if retry else 0),
+                                  key))
         chosen = self._select(cands, [b for b in busy if b.kind == "core"])
         if not self.dx:
             return chosen

@@ -22,7 +22,7 @@ import sys
 import threading
 import time
 import webbrowser
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import numpy as np
@@ -130,6 +130,50 @@ def save_image(path: Path, img, params=None):
     if not cv2.imwrite(str(tmp), img, params or []):
         raise IOError(f"could not write {tmp}")
     os.replace(tmp, path)
+
+
+def run_key(product: dict, utc: str) -> str | None:
+    """Same value for a chart and its repeats (the chart, its model run and
+    the run's date), so a repeat can be told from a newer issue."""
+    try:
+        when = datetime.strptime(utc, "%Y-%m-%dT%H:%M:%SZ")
+        slot = when.replace(hour=int(product["slot"][:2]), minute=int(product["slot"][2:]))
+        if slot > when + timedelta(hours=1):
+            slot -= timedelta(days=1)
+        valid = str(product.get("valid") or "")
+        run_day = (slot - timedelta(hours=(slot.hour - int(valid)) % 24)).date() if valid.isdigit() else slot.date()
+        c = re.sub(r"\s+", " ", str(product["contents"]).lower()).strip()
+        return f"{product['short']}|{c}|{valid}|{run_day}"
+    except Exception:
+        return None
+
+
+def keep_station_copy(out: Path, product, img_u8, quality: float, utc: str, source_id: str):
+    """stations/<station>/<chart>.png: always the latest copy of each chart.
+    A newer issue replaces it; a repeat of the same issue only replaces it
+    if it decoded better."""
+    if not product or not product.get("slot") or not product.get("contents"):
+        return
+    folder = out / "stations" / re.sub(r"[^A-Za-z0-9_.-]", "_", product["short"])
+    name = re.sub(r"[^A-Za-z0-9_.-]", "_", slug(product["contents"]))
+    png, info = folder / f"{name}.png", folder / f"{name}.json"
+    key = run_key(product, utc)
+    try:
+        old = json.loads(info.read_text()) if info.exists() else None
+    except Exception:
+        old = None
+    if old and key and old.get("run") == key and float(old.get("quality", 0)) >= quality:
+        log.info("station copy: kept the earlier %s (quality %.2f >= %.2f)",
+                 png.relative_to(out), float(old.get("quality", 0)), quality)
+        return
+    save_image(png, img_u8)
+    rec = {"run": key, "quality": round(quality, 3), "utc": utc, "fax": source_id,
+           "chart": product.get("contents"), "valid": product.get("valid")}
+    tmp = info.with_name(info.name + ".part")
+    tmp.write_text(json.dumps(rec, indent=1))
+    os.replace(tmp, info)
+    why = "better repeat" if old and old.get("run") == key else "latest issue"
+    log.info("station copy: %s (%s, quality %.2f)", png.relative_to(out), why, quality)
 
 
 def organise_existing(out: Path):
@@ -251,6 +295,11 @@ class Processor:
         tmp.write_text(json.dumps(rec, indent=1, default=float))
         os.replace(tmp, self.out / f"{stem}.json")
         log.info("saved %s  (%d x %d, %.1f s)", self.out / enh_f, e8.shape[1], e8.shape[0], time.time() - t0)
+        try:
+            keep_station_copy(self.out, product, e8, float(res["meta"].get("quality", 0)),
+                              meta.get("utc", ""), stem)
+        except Exception as e:
+            log.info("station copy failed: %s", e)
         self.hub.publish("fax", {"id": stem})
         if getattr(self, "auto", None) is not None:
             self.auto.on_fax(product, res["meta"], meta.get("utc", ""))

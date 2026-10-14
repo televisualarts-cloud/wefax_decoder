@@ -88,6 +88,7 @@ Everything is written under `./faxes/` (change this with `--out`):
 | `raw/<name>.png` | Decoded chart: geometry corrected, no cleaning |
 | `enhanced/<name>.png` | Cleaned chart at 2x resolution |
 | `thumbs/<name>.jpg` | Thumbnail for the page |
+| `stations/<station>/<chart>.png` | The latest copy of each chart, e.g. `stations/Northwood/Surface-Analysis.png`. A newer issue replaces it; a repeat of the same issue only replaces it if it decoded better. The `.json` beside it gives its quality and time |
 | `<name>.json` | Decode details: station and chart, IOC, LPM, AFC, clock ppm, quality, tears, etc. |
 | `proplog.jsonl` | The auto-scheduler's log of every attempt (SNR, quality) |
 | `settings.json` | Your audio input, CAT port and 1st/2nd priority stations |
@@ -129,8 +130,10 @@ The auto-scheduler needs CAT. Press **AUTO** on the page, or start with
   first, then wave and other charts.
 - **Clashes:** the 1st priority station wins over the 2nd.
 - **Repeats:** a chart broadcast several times is only taken until one good
-  copy has been decoded. A poor copy makes the next repeat eligible again.
-- **Gaps:** charts from the same station can follow straight on. Gaps long enough for a whole chart, plus 75 s before and 45 s
+  copy has been decoded. If the first try at a priority station's chart was
+  poor or not decoded, its next repeat goes ahead of every other chart,
+  priority or DX.
+- **Gaps:** gaps long enough for a whole chart, plus 75 s before and 45 s
   after, are filled with DX stations.
 - **Charts in progress:** once a chart has started, nothing else is planned
   over it, and the scheduler never retunes while a chart is being received,
