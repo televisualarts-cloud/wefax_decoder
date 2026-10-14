@@ -16,6 +16,13 @@ PAD_FRAC = 0.45         # padding inside the box, as a fraction of the text heig
 LINE_GAP = 0.35         # gap between the two lines, as a fraction of the text height
 BORDER_FRAC = 0.10      # border thickness, as a fraction of the text height
 
+
+def _white() -> int:
+    """Box white matches the chart's paper white (enhance.WHITE_LEVEL)."""
+    from .enhance import WHITE_LEVEL
+    return int(round(255 * WHITE_LEVEL))
+
+
 _COUNTRY = {"united kingdom": "UK", "u.s.a.": "USA", "usa": "USA", "republic of korea": "South Korea"}
 _CITY = {"DWD": "DWD Hamburg", "PtReyes": "Point Reyes", "GuanzouCoastRadioStationXSQ": "Guanzou",
          "RioDeJaneiro": "Rio de Janeiro", "NewOrleans": "New Orleans"}
@@ -63,7 +70,7 @@ def stamp(img_u8: np.ndarray, lines: list[str]) -> np.ndarray:
         bw = tw + 2 * pad + 2 * border
         bh = len(lines) * lh + (len(lines) - 1) * gap + 2 * pad + 2 * border
         d.rectangle([0, 0, bw - 1, bh - 1], fill=0)
-        d.rectangle([border, border, bw - 1 - border, bh - 1 - border], fill=255)
+        d.rectangle([border, border, bw - 1 - border, bh - 1 - border], fill=_white())
         y = border + pad
         for t in lines:
             d.text((border + pad, y), t, font=font, fill=0)
@@ -80,7 +87,7 @@ def stamp(img_u8: np.ndarray, lines: list[str]) -> np.ndarray:
         bw = max(s[0] for s in sizes) + 2 * pad + 2 * border
         bh = len(lines) * lh + (len(lines) - 1) * gap + 2 * pad + 2 * border
         cv2.rectangle(out, (0, 0), (bw - 1, bh - 1), 0, -1)
-        cv2.rectangle(out, (border, border), (bw - 1 - border, bh - 1 - border), 255, -1)
+        cv2.rectangle(out, (border, border), (bw - 1 - border, bh - 1 - border), _white(), -1)
         y = border + pad
         for t, s in zip(lines, sizes):
             cv2.putText(out, t, (border + pad, y + s[1]), cv2.FONT_HERSHEY_SIMPLEX, scale, 0, th, cv2.LINE_AA)

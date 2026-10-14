@@ -152,6 +152,20 @@ def destreak(x: np.ndarray, tau: float = 0.18) -> np.ndarray:
 # below this noise level (clean, strong signal) the chart gets only light
 # processing; measured: clean DWD ~0.008, typical noisy copies 0.02 - 0.1
 CLEAN_SIGMA = 0.015
+# Paper is shown at this level rather than 100 % white: easier on the eye,
+# and faint marks near white aren't lost on screens that clip early.
+WHITE_LEVEL = 0.92
+# background greys lighter than PAPER_KNEE[0] fade smoothly to paper white by
+# PAPER_KNEE[1] (was a hard snap at 0.6, which erased faint or noisy text)
+PAPER_KNEE = (0.62, 0.88)
+NLM_STRENGTH = 1.35   # background denoising strength (x noise level; was 1.6)
+
+
+def _soft_paper(bg: np.ndarray) -> np.ndarray:
+    a, b = PAPER_KNEE
+    t = np.clip((bg - a) / (b - a), 0, 1)
+    t = t * t * (3 - 2 * t)
+    return bg + (1 - bg) * t
 
 _KERNELS = {}
 
@@ -210,12 +224,12 @@ def reconstruct_lines(base: np.ndarray, n_angles: int = 24, z0: float = 4.5):
     # background: denoised, paper pushed to white
     sigma = noise_sigma(base)
     u8 = (np.clip(base, 0, 1) * 255 + 0.5).astype(np.uint8)
-    den = cv2.fastNlMeansDenoising(u8, None, float(np.clip(sigma * 255 * 1.6, 3, 25)), 5, 13) / 255.0
+    den = cv2.fastNlMeansDenoising(u8, None, float(np.clip(sigma * 255 * NLM_STRENGTH, 3, 18)), 5, 13) / 255.0
     lo, hi = np.percentile(den, 1), np.percentile(den, 55)
     if hi - lo < 0.2:
         lo, hi = 0.0, 1.0
     bg = np.clip((den - lo) / (hi - lo), 0, 1)
-    bg = np.where(bg > 0.6, 1.0, bg) ** 1.3
+    bg = _soft_paper(bg) ** 1.3
     return np.minimum(bg, 1 - 0.9 * p).astype(np.float32), p
 
 
@@ -265,7 +279,7 @@ def enhance(img: np.ndarray, conf: np.ndarray, scale: int = 2,
         info["upscaler"] = how
         info["mode"] = "light"
         log(f"enhance: {info}")
-        return np.clip(up2, 0, 1).astype(np.float32), info
+        return (np.clip(up2, 0, 1) * WHITE_LEVEL).astype(np.float32), info
 
     if mode == "auto" and cv2 is not None:
         rec, pmap = reconstruct_lines(rep)
@@ -277,7 +291,7 @@ def enhance(img: np.ndarray, conf: np.ndarray, scale: int = 2,
         info["upscaler"] = how
         info["mode"] = "reconstruct"
         log(f"enhance: {info}")
-        return np.clip(up2, 0, 1).astype(np.float32), info
+        return (np.clip(up2, 0, 1) * WHITE_LEVEL).astype(np.float32), info
 
     # 3. light non-local means (strength from a robust noise estimate)
     sigma = noise_sigma(rep)
@@ -313,4 +327,4 @@ def enhance(img: np.ndarray, conf: np.ndarray, scale: int = 2,
         out = np.clip((up2 - lo) / (hi - lo), 0, 1) ** 1.3
         info["mode"] = "clean"
     log(f"enhance: {info}")
-    return out.astype(np.float32), info
+    return (np.clip(out, 0, 1) * WHITE_LEVEL).astype(np.float32), info

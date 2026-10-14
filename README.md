@@ -246,8 +246,12 @@ sideways.
 3. On noisy charts, 24 oriented line detectors rebuild broken isobars and
    fronts. A mark only counts as a line if it responds along its direction
    and not across it, so text and noise are left alone.
-4. The background gets non-local-means denoising, and the result is upscaled
-   2x with FSRCNN.
+4. The background gets light non-local-means denoising. Faint greys fade
+   gradually into the paper rather than being cut off, so weak or noisy text
+   stays readable. The result is upscaled 2x with FSRCNN.
+5. Paper is shown at 92% white rather than full white (`WHITE_LEVEL` in
+   `wefax/enhance.py`), which is easier on the eye and keeps detail on screens
+   that clip near white.
 
 ## Testing without a radio
 
