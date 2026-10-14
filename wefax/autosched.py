@@ -445,6 +445,12 @@ class Planner:
             a = it.start - timedelta(seconds=LEAD_S)
             b = it.end + timedelta(seconds=TAIL_S)
             for t in taken:
+                if t.short == it.short:
+                    # same station, e.g. Northwood every 12 minutes: no tuning
+                    # margins needed between its charts, just no overlap
+                    if it.start < t.end and t.start < it.end:
+                        return False
+                    continue
                 ta = t.start - timedelta(seconds=LEAD_S)
                 tb = t.end + timedelta(seconds=TAIL_S)
                 if a < tb and ta < b:

@@ -71,12 +71,12 @@
   .prio #selAudio.bad { border-color: var(--bad); }
   .prio #selCat.ok { border-color: var(--rx); }
   .prio #selCat.bad { border-color: var(--bad); }
+  .sched button:disabled, .toolbar button:disabled { opacity: .45; cursor: default; }
   #nextBig { font: 600 20px var(--mono); color: #fff; padding: 2px 12px; border: 1px solid var(--line);
     border-radius: 6px; background: #141a21; white-space: nowrap; }
   #nextBig b { color: var(--cyan); font-size: 24px; margin-left: 10px; }
   #nextBig.soon b { color: var(--busy); }
   #nextBig small { font-size: 13px; color: var(--dim); font-weight: 400; margin-left: 8px; }
-  .sched button:disabled, .toolbar button:disabled { opacity: .45; cursor: default; }
   .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-left: 6px; }
   .chip { font: 13px var(--mono); padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px;
     color: var(--text); cursor: pointer; background: #121820; white-space: nowrap; max-width: 300px;
@@ -175,8 +175,7 @@
     <div style="flex-basis:100%;height:0"></div>
     <button id="bAuto" title="Auto-schedule: tune SDR Console to the most important Northwood/DWD charts, DX in the gaps">AUTO</button>
     <span id="autoMsg"></span>
-    <span id="nextBig" hidden></span>
-    <span title="What the auto-scheduler will tune, in order">AUTO PLAN</span><div class="chips" id="plan"></div>
+    <span title="What the auto-scheduler will tune, in order">AUTO PLAN</span><span id="nextBig" hidden></span><div class="chips" id="plan"></div>
   </div>
   <div class="toolbar">
     <button id="bEnh" class="on">Enhanced</button>
@@ -515,8 +514,6 @@ async function loadStations() {
   const pre = j.station && stations.find(x => x.short.toLowerCase() === j.station.toLowerCase() || x.name.toLowerCase().includes(j.station.toLowerCase()));
   if (pre) selS.value = pre.name;
   fillFreqs(); fillUpcoming();
-  curDial = null;                       // pickers were rebuilt: line them up with the radio again
-  if (lastStatus && Date.now() - touched >= 60000) followRadio(lastStatus);
   $('bTune').disabled = !catOn;
   $('bTune').title = catOn ? 'Retune SDR Console' : 'Start the decoder with --cat COMx to enable tuning';
 }
@@ -633,7 +630,7 @@ loadPorts();
 loadAudio(true);
 // ---------------- auto-scheduler ----------------
 let planCache = null;
-function tickNext() {
+function tickNext() {                    // large countdown to the next planned chart
   const el = $('nextBig');
   const j = planCache;
   if (!j || !j.enabled) { el.hidden = true; return; }
@@ -644,8 +641,8 @@ function tickNext() {
   const left = Math.round(nx.start_ts - now);
   let t;
   if (left > 0) {
-    const h = Math.floor(left / 3600), m = Math.floor(left % 3600 / 60), s = left % 60;
-    t = (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0');
+    const h = Math.floor(left / 3600), m = Math.floor(left % 3600 / 60), sec = left % 60;
+    t = (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(sec).padStart(2, '0');
   } else t = lastStatus && lastStatus.state === 'receiving' ? 'waiting' : 'now';
   el.classList.toggle('soon', left <= 120);
   el.title = `${nx.station} ${nx.khz} kHz (dial ${nx.dial}) - ${nx.contents}`;
@@ -655,13 +652,13 @@ setInterval(tickNext, 1000);
 async function loadPlan() {
   let j;
   try { j = await (await fetch('/api/plan')).json(); } catch (e) { return; }
-  planCache = j; tickNext();
   const b = $('bAuto');
   b.classList.toggle('on', !!j.enabled);
   b.textContent = j.enabled ? 'AUTO ON' : 'AUTO OFF';
   b.disabled = !j.cat;
   if (!j.cat) b.title = 'Start the decoder with --cat COMx to enable the auto-scheduler';
   $('autoMsg').textContent = j.enabled && j.paused_min ? `paused ${j.paused_min} min (manual tune)` : '';
+  planCache = j; tickNext();
   const nowS = Date.now() / 1000;
   const nxt = (j.plan || []).find(x => x.state === 'planned' && x.start_ts > nowS - 60);
   $('plan').innerHTML = (j.plan || []).slice(0, 7).map(x => {

@@ -130,7 +130,7 @@ The auto-scheduler needs CAT. Press **AUTO** on the page, or start with
 - **Clashes:** the 1st priority station wins over the 2nd.
 - **Repeats:** a chart broadcast several times is only taken until one good
   copy has been decoded. A poor copy makes the next repeat eligible again.
-- **Gaps:** gaps long enough for a whole chart, plus 75 s before and 45 s
+- **Gaps:** charts from the same station can follow straight on. Gaps long enough for a whole chart, plus 75 s before and 45 s
   after, are filled with DX stations.
 - **Charts in progress:** once a chart has started, nothing else is planned
   over it, and the scheduler never retunes while a chart is being received,
