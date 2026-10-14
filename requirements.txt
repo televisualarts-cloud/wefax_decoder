@@ -2,5 +2,6 @@ numpy>=1.24
 scipy>=1.10
 opencv-python-headless>=4.8
 sounddevice>=0.4.6
+pillow>=9.0          # title block on the enhanced charts (falls back to a plainer font without it)
 pyserial>=3.5        # SDR Console CAT (optional)
 onnxruntime>=1.16    # optional: FSRCNN x2 upscaler (falls back to Lanczos without it)

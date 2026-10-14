@@ -40,8 +40,9 @@ Python 3.9 or later.
 pip install -r requirements.txt
 ```
 
-`onnxruntime` (for the neural upscaler) and `pyserial` (for CAT) are
-optional. Without them the decoder uses a Lanczos upscale and cannot do CAT.
+`onnxruntime` (for the neural upscaler), `pyserial` (for CAT) and `pillow`
+(for the title block font) are optional. Without them the decoder uses a Lanczos
+upscale, cannot do CAT, and draws the title block in a plainer font.
 
 ## Quick start
 
@@ -86,7 +87,7 @@ Everything is written under `./faxes/` (change this with `--out`):
 | Path | Contents |
 |---|---|
 | `raw/<name>.png` | Decoded chart: geometry corrected, no cleaning |
-| `enhanced/<name>.png` | Cleaned chart at 2x resolution |
+| `enhanced/<name>.png` | Cleaned chart at 2x resolution, with a title block top left: station, frequency, date, chart, model run and decode quality |
 | `thumbs/<name>.jpg` | Thumbnail for the page |
 | `stations/<station>/<chart>.png` | The latest copy of each chart, e.g. `stations/Northwood/Surface-Analysis.png`. A newer issue replaces it; a repeat of the same issue only replaces it if it decoded better. The `.json` beside it gives its quality and time |
 | `<name>.json` | Decode details: station and chart, IOC, LPM, AFC, clock ppm, quality, tears, etc. |
@@ -133,7 +134,7 @@ The auto-scheduler needs CAT. Press **AUTO** on the page, or start with
   copy has been decoded. If the first try at a priority station's chart was
   poor or not decoded, its next repeat goes ahead of every other chart,
   priority or DX.
-- **Gaps:** gaps long enough for a whole chart, plus 75 s before and 45 s
+- **Gaps:** charts from the same station can follow straight on. Gaps long enough for a whole chart, plus 75 s before and 45 s
   after, are filled with DX stations.
 - **Charts in progress:** once a chart has started, nothing else is planned
   over it, and the scheduler never retunes while a chart is being received,
@@ -268,7 +269,7 @@ tools/
 
 The code in this project is released under the MIT License (see `LICENSE`).
 
-Two bundled third-party files keep their own licences:
+Three bundled third-party files keep their own licences:
 
 - `wefax/data/WeatherFaxSchedules.xml` is from the OpenCPN weatherfax plugin
   ([rgleason/weatherfax_pi](https://github.com/rgleason/weatherfax_pi)) and
@@ -276,6 +277,8 @@ Two bundled third-party files keep their own licences:
   is a data file read at run time, not part of the code. If you redistribute
   it, the GPL-3.0 terms apply to that file. You can also leave it out and
   supply your own copy next to `wefax_decoder.py`.
+- `wefax/fonts/DejaVuSans-Bold.ttf` is the DejaVu Sans Bold font, under the
+  Bitstream Vera licence (see `wefax/fonts/DejaVu_LICENSE.txt`).
 - `wefax/models/fsrcnn_x2.onnx` contains the FSRCNN x2 weights from
   [Saafke/FSRCNN_Tensorflow](https://github.com/Saafke/FSRCNN_Tensorflow),
   Apache-2.0 (see `wefax/models/FSRCNN_LICENSE.txt`). They were converted to

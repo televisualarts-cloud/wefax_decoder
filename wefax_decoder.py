@@ -29,6 +29,7 @@ import numpy as np
 
 from wefax import dsp, decode, enhance, server
 from wefax.schedule import Schedules, slug
+from wefax import label
 from wefax.frontend import Detector, LiveCapture
 
 try:
@@ -274,6 +275,12 @@ class Processor:
         raw_f, enh_f, th_f = f"raw/{stem}.png", f"enhanced/{stem}.png", f"thumbs/{stem}.jpg"
         u8 = lambda x: (np.clip(x, 0, 1) * 255 + 0.5).astype(np.uint8)
         e8 = u8(enh)
+        if product and product.get("contents"):
+            try:            # title block, top left of the enhanced chart
+                e8 = label.stamp(e8, label.title_lines(product, meta.get("utc", ""),
+                                                       res["meta"].get("quality")))
+            except Exception as e:
+                log.info("title block failed: %s", e)
         tw = 300
         th = cv2.resize(e8, (tw, max(1, int(e8.shape[0] * tw / e8.shape[1]))), interpolation=cv2.INTER_AREA)
         save_image(self.out / raw_f, u8(img))
