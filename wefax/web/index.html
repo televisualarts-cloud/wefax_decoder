@@ -91,6 +91,10 @@
   .chip.core b { color: var(--rx); }
   .chip.tuned { background: #173022; border-color: var(--rx); }
   .chip.done, .chip.closing, .chip.skipped { opacity: .45; }
+  .chip i { font-style: normal; font-weight: 700; margin-right: 6px; }
+  .chip.tuned i { color: var(--rx); }
+  .chip.next { border-color: var(--cyan); border-width: 2px; }
+  .chip.next i { color: var(--cyan); }
   .toolbar { display: flex; gap: 8px; align-items: center; padding: 8px 16px;
     border-bottom: 1px solid var(--line); flex-wrap: wrap; }
   button, a.btn { font: 14px var(--mono); color: var(--text); background: #171c23;
@@ -167,12 +171,12 @@
     <span>FREQ</span><select id="selFreq"></select>
     <button id="bTune">Tune</button><span id="tuneMsg"></span>
     <div style="flex-basis:100%;height:0"></div>
-    <span>NEXT</span><div class="chips" id="upcoming"></div>
+    <span title="Broadcast times of the station selected above - click one to tune it">THIS STATION</span><div class="chips" id="upcoming"></div>
     <div style="flex-basis:100%;height:0"></div>
     <button id="bAuto" title="Auto-schedule: tune SDR Console to the most important Northwood/DWD charts, DX in the gaps">AUTO</button>
     <span id="autoMsg"></span>
     <span id="nextBig" hidden></span>
-    <span>PLAN</span><div class="chips" id="plan"></div>
+    <span title="What the auto-scheduler will tune, in order">AUTO PLAN</span><div class="chips" id="plan"></div>
   </div>
   <div class="toolbar">
     <button id="bEnh" class="on">Enhanced</button>
@@ -658,9 +662,15 @@ async function loadPlan() {
   b.disabled = !j.cat;
   if (!j.cat) b.title = 'Start the decoder with --cat COMx to enable the auto-scheduler';
   $('autoMsg').textContent = j.enabled && j.paused_min ? `paused ${j.paused_min} min (manual tune)` : '';
-  $('plan').innerHTML = (j.plan || []).slice(0, 7).map(x =>
-    `<span class="chip ${x.kind} ${x.state}" title="${x.station} ${x.khz} kHz (dial ${x.dial}) - ${x.contents}${x.valid ? ' (' + x.valid + 'Z)' : ''} [${x.kind}, ${x.state}]">` +
-    `<b>${x.start}</b> ${x.station} ${x.khz} · ${x.contents}</span>`).join('') || '<span style="color:var(--dim)">-</span>';
+  const nowS = Date.now() / 1000;
+  const nxt = (j.plan || []).find(x => x.state === 'planned' && x.start_ts > nowS - 60);
+  $('plan').innerHTML = (j.plan || []).slice(0, 7).map(x => {
+    const tag = x.state === 'tuned' ? 'NOW' : x === nxt ? 'NEXT' : '';
+    const m = Math.round((x.start_ts - nowS) / 60);
+    const inT = x.state === 'planned' && m > 0 ? ' ' + (m < 60 ? m + 'm' : Math.floor(m / 60) + 'h' + String(m % 60).padStart(2, '0')) : '';
+    return `<span class="chip ${x.kind} ${x.state}${x === nxt ? ' next' : ''}" title="${x.station} ${x.khz} kHz (dial ${x.dial}) - ${x.contents}${x.valid ? ' (' + x.valid + 'Z)' : ''} [${x.kind}, ${x.state}]">` +
+      `${tag ? '<i>' + tag + '</i>' : ''}<b>${x.start}</b>${inT} ${x.station} ${x.khz} · ${x.contents}</span>`;
+  }).join('') || '<span style="color:var(--dim)">-</span>';
 }
 $('bAuto').onclick = async () => {
   const on = !$('bAuto').classList.contains('on');
