@@ -80,6 +80,25 @@ the command line):
 To decode a recording instead of live audio, run
 `python wefax_decoder.py --wav recording.wav`.
 
+## Leave it running
+
+The app is designed to run continuously, 24 hours a day. After the first run,
+leave it on AUTO for several weeks.
+
+The app has knowledge of all fax frequencies and schedules from around the
+world. Set your two nearest priority stations in the top right of the browser
+window (in the UK I set Northwood and DWD). During schedule clashes these
+stations will take priority. Analysis and gale warning broadcasts will also
+take priority over prognosis forecasts.
+
+Over many days and weeks the app will probe all the frequency options for each
+station and learn the best frequencies depending upon the time and season. As
+the year progresses it will continue to learn, as some frequencies get stronger
+or weaker as the seasons change.
+
+Try not to interrupt reception or retune the radio manually, as this will upset
+the learning process.
+
 ## Saved files
 
 Everything is written under `./faxes/` (change this with `--out`):
