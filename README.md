@@ -132,8 +132,12 @@ The auto-scheduler needs CAT. Press **AUTO** on the page, or start with
   copy has been decoded. A poor copy makes the next repeat eligible again.
 - **Gaps:** gaps long enough for a whole chart, plus 75 s before and 45 s
   after, are filled with DX stations.
-- **Charts in progress:** the scheduler never retunes while a chart is still
-  being received, even if it runs longer than the schedule says.
+- **Charts in progress:** the scheduler doesn't retune while a chart is still
+  being received, even if it runs a little longer than the schedule says. If
+  a recording is still running 3 minutes after its chart should have ended
+  (and has run at least 14 minutes), it is ended so the next planned chart
+  isn't missed. A recording not tied to a planned chart is ended after 25
+  minutes.
 - **Frequency choice:** each slot gets the frequency that has worked best at
   that time of day. With no history yet, it uses a simple ionospheric
   estimate based on path length and sun height at the path mid-point.
@@ -180,7 +184,9 @@ the current settings. It keeps each previous enhanced image as `*_old.png`.
 
 **Detection.** A cheap causal demodulator watches for the start tone (300 Hz
 for IOC 576, 675 Hz for IOC 288), the phasing pattern, the 450 Hz stop tone,
-and loss of signal. A band-power test keeps a weak or fading fax counted as
+and loss of signal. If the stop tone is missed on a back-to-back broadcast,
+the next chart's phasing still closes the current chart and starts a new one.
+A band-power test keeps a weak or fading fax counted as
 present. The whole transmission, with 12 s of pre-roll, is then decoded
 offline.
 

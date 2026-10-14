@@ -434,6 +434,7 @@ def main():
                                           on_preview=hub.set_live),
                       device=device, channel=args.channel, samplerate=args.samplerate, log=log.info)
     hub.capture = cap
+    auto.force_end = lambda reason: cap.detector and cap.detector.request_finish(reason)
 
     def watcher():          # tells the live panel whether a chart is expected now
         last = None

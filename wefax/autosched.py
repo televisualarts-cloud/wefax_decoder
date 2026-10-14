@@ -74,6 +74,9 @@ MIN_CORE_IMPORTANCE = 10
 
 LEAD_S = 75          # tune this long before the slot
 TAIL_S = 45          # extra time after the expected end
+OVERRUN_S = 180      # a chart still recording this long after its slot end ...
+HOLD_MIN_S = 14 * 60  # ... and recording at least this long, is ended for the next planned chart
+HOLD_MAX_S = 25 * 60  # a recording not tied to a planned chart is ended after this
 GOOD_QUALITY = 0.6   # decode quality that counts as 'collected'
 HALF_LIFE_DAYS = 21  # learned results lose half their weight in this time
 PROBE_DAYS = 14      # re-check an alternative frequency not tried for this long
@@ -475,6 +478,9 @@ class AutoScheduler:
         self.items: list[Item] = []
         self.current: Item | None = None
         self.receiving = False
+        self.rec_elapsed = 0.0
+        self.force_end = None          # set by the main program: ends the recording in progress
+        self._forced_t = 0.0
         self.last_snr = None
         self._last_plan = 0.0
         self._lock = threading.Lock()
@@ -533,6 +539,7 @@ class AutoScheduler:
     # -------- feeds from the decoder
     def on_status(self, s: dict):
         self.receiving = s.get("state") == "receiving"
+        self.rec_elapsed = float(s.get("elapsed") or 0) if self.receiving else 0.0
         if s.get("snr_db") is not None:
             self.last_snr = float(s["snr_db"])
 
@@ -592,10 +599,23 @@ class AutoScheduler:
                     and i.start - timedelta(seconds=LEAD_S) <= now < i.end), None)
         if due is None:
             return
-        if self.receiving:
+        if self.receiving and time.time() - self._forced_t > 30:
             # a chart is still coming in (start tone seen, no stop tone / signal
-            # loss yet): never retune until it has finished, even if it is
-            # running longer than the schedule says
+            # loss yet): don't retune until it has finished - but not for ever.
+            # A missed stop tone on a back-to-back broadcast would otherwise
+            # hold the radio here and every later planned chart would be lost.
+            cur, el = self.current, self.rec_elapsed
+            if cur is not None and cur.state == "tuned":
+                over = now > cur.end + timedelta(seconds=OVERRUN_S) and el > HOLD_MIN_S
+            else:
+                over = el > HOLD_MAX_S
+            if over and self.force_end is not None:
+                self.logf(f"auto: recording has run {el / 60:.0f} min, past its expected end - "
+                          f"ending it for {due.start:%H:%M}Z {due.short}")
+                self._forced_t = time.time()
+                self._hold_logged = False
+                self.force_end("overran schedule")
+                return
             if not getattr(self, "_hold_logged", False):
                 self._hold_logged = True
                 self.logf(f"auto: holding - chart still being received; "

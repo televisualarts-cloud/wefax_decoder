@@ -68,6 +68,8 @@ class Detector:
         # the incoming noise ('NO SIGNAL') - nothing is recorded or saved.
         self.watch: dict | None = None
         self.npreview: LivePreview | None = None
+        # set from another thread (the auto-scheduler) to end the recording
+        self._finish_req: str | None = None
 
     # ------------------------------------------------------------------
     def feed(self, x: np.ndarray, t: float | None = None, overflow: bool = False):
@@ -154,6 +156,18 @@ class Detector:
                 self.rec = self.rec[:-len(seed)]
                 self._finish("new start tone")
                 self._begin("start tone", ioc, seed=seed)
+            elif self._finish_req is not None:
+                reason, self._finish_req = self._finish_req, None
+                self._finish(reason)
+            elif elapsed > self.SPLIT_MIN_S and self.block_count % 4 == 0 and self._phasing_now():
+                # the next chart's phasing has started, but its start tone (and
+                # this chart's stop tone) were missed: close this chart and
+                # start a new recording from shortly before the phasing
+                k = int(self.SPLIT_SEED_S / self.BLOCK_S)
+                seed = self.rec[-k:]
+                self.rec = self.rec[:-k]
+                self._finish("new phasing")
+                self._begin("phasing", None, seed=seed)
             elif self.invalid_run >= self.lost_blocks:
                 # drop the trailing noise, keep a few seconds of margin
                 keep = len(self.rec) - max(0, self.invalid_run - int(4 / self.BLOCK_S))
@@ -178,8 +192,27 @@ class Detector:
             s["trigger"] = self.rec_meta.get("trigger")
         return s
 
+    SPLIT_MIN_S = 150     # earliest point in a recording to look for the next chart's phasing
+    SPLIT_HITS = 5        # consecutive 1 s phasing checks needed to split
+    SPLIT_SEED_S = 20.0   # audio before the detection carried into the new recording
+
+    def request_finish(self, reason: str = "ended by scheduler"):
+        """Ask for the current recording to end (safe from another thread)."""
+        if self.state == "receiving":
+            self._finish_req = reason
+
+    def _phasing_now(self) -> bool:
+        if len(self.fhist) < self.fhist.maxlen:
+            return False
+        if phasing_like(np.concatenate(self.fhist), self.fs):
+            self.phase_hits += 1
+        else:
+            self.phase_hits = 0
+        return self.phase_hits >= self.SPLIT_HITS
+
     def _begin(self, trigger: str, ioc, seed=None):
         self.state = "receiving"
+        self._finish_req = None
         self.npreview = None
         self.rec = list(seed) if seed is not None else list(self.pre)
         self.rec_n = sum(len(b) for b in self.rec)
