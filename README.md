@@ -132,12 +132,13 @@ The auto-scheduler needs CAT. Press **AUTO** on the page, or start with
   copy has been decoded. A poor copy makes the next repeat eligible again.
 - **Gaps:** gaps long enough for a whole chart, plus 75 s before and 45 s
   after, are filled with DX stations.
-- **Charts in progress:** the scheduler doesn't retune while a chart is still
-  being received, even if it runs a little longer than the schedule says. If
-  a recording is still running 3 minutes after its chart should have ended
-  (and has run at least 14 minutes), it is ended so the next planned chart
-  isn't missed. A recording not tied to a planned chart is ended after 25
-  minutes.
+- **Charts in progress:** once a chart has started, nothing else is planned
+  over it, and the scheduler never retunes while a chart is being received,
+  even if it runs longer than the schedule says. The only exception is a
+  recording that has run over 25 minutes, longer than any single chart, which
+  means a stop tone was missed; it is ended so later charts aren't lost.
+  If the scheduler does have to leave a chart early, that attempt isn't counted
+  against the frequency.
 - **Frequency choice:** each slot gets the frequency that has worked best at
   that time of day. With no history yet, it uses a simple ionospheric
   estimate based on path length and sun height at the path mid-point.

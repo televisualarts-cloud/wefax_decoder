@@ -74,9 +74,7 @@ MIN_CORE_IMPORTANCE = 10
 
 LEAD_S = 75          # tune this long before the slot
 TAIL_S = 45          # extra time after the expected end
-OVERRUN_S = 180      # a chart still recording this long after its slot end ...
-HOLD_MIN_S = 14 * 60  # ... and recording at least this long, is ended for the next planned chart
-HOLD_MAX_S = 25 * 60  # a recording not tied to a planned chart is ended after this
+HOLD_MAX_S = 25 * 60  # a recording longer than any single chart is ended for the next planned one
 GOOD_QUALITY = 0.6   # decode quality that counts as 'collected'
 HALF_LIFE_DAYS = 21  # learned results lose half their weight in this time
 PROBE_DAYS = 14      # re-check an alternative frequency not tried for this long
@@ -382,7 +380,10 @@ class Planner:
         scored.sort(reverse=True)
         return scored[0][1], scored[0][0]
 
-    def plan(self, now: datetime, horizon_h: float = 24.0) -> list[Item]:
+    def plan(self, now: datetime, horizon_h: float = 24.0, busy: list[Item] | None = None) -> list[Item]:
+        """busy: items the radio is on now. Their time stays blocked, so
+        nothing is planned over a chart that has already started."""
+        busy = list(busy or [])
         cands: list[Item] = []
         # ---- core stations
         for st in self.sched.stations:
@@ -409,7 +410,7 @@ class Planner:
                 khz, p = self._best_freq(st.short, khzs, start, explore=imp < 20)
                 cands.append(Item(start, end, st.short, st.name, sl.hhmm, contents, valid, khz, "core",
                                   self.core[st.short] + imp * 10 + 50 * p - 25 * n, key))
-        chosen = self._select(cands)
+        chosen = self._select(cands, [b for b in busy if b.kind == "core"])
         if not self.dx:
             return chosen
         # ---- DX stations in the gaps
@@ -432,7 +433,7 @@ class Planner:
                 key = f"{chart_key(st.short, sl.contents, sl.valid)}|{start.date()}"
                 dx.append(Item(start, end, st.short, st.name, sl.hhmm, sl.contents, sl.valid, khz, "dx",
                                100 * p + imp, key))
-        return self._select(dx, chosen)
+        return self._select(dx, chosen + [b for b in busy if b.kind != "core"])
 
     @staticmethod
     def _select(cands: list[Item], fixed: list[Item] | None = None) -> list[Item]:
@@ -525,7 +526,10 @@ class AutoScheduler:
 
     def replan(self):
         now = self.clock()
-        new = self.planner.plan(now)
+        with self._lock:
+            busy = [i for i in self.items if i.state == "tuned"
+                    and i.end + timedelta(seconds=TAIL_S) > now]
+        new = self.planner.plan(now, busy=busy)
         with self._lock:
             keep = {(i.short, i.start): i for i in self.items if i.state != "planned"}
             items = [keep.pop((i.short, i.start), i) for i in new]
@@ -591,7 +595,11 @@ class AutoScheduler:
                     self._close(it)
             if it.state == "closing" and (it.result is not None or time.time() - it.close_t > 150):
                 it.state = "done"
-                self._log_item(it, it.result["quality"] if it.result else 0.0)
+                if it.result is None and getattr(it, "abandoned", False):
+                    # left before the chart could finish: says nothing about propagation
+                    self.logf(f"auto: {it.short} {it.khz} kHz {it.slot}Z left early - not counted")
+                else:
+                    self._log_item(it, it.result["quality"] if it.result else 0.0)
         if not self.enabled or time.time() < self.paused_until or self.cat is None or not self.cat.enabled:
             return
         # next item due
@@ -600,17 +608,15 @@ class AutoScheduler:
         if due is None:
             return
         if self.receiving and time.time() - self._forced_t > 30:
-            # a chart is still coming in (start tone seen, no stop tone / signal
-            # loss yet): don't retune until it has finished - but not for ever.
-            # A missed stop tone on a back-to-back broadcast would otherwise
-            # hold the radio here and every later planned chart would be lost.
-            cur, el = self.current, self.rec_elapsed
-            if cur is not None and cur.state == "tuned":
-                over = now > cur.end + timedelta(seconds=OVERRUN_S) and el > HOLD_MIN_S
-            else:
-                over = el > HOLD_MAX_S
+            # a chart is still coming in: never retune while it is being
+            # decoded. The one exception is a recording far longer than any
+            # single chart (a missed stop tone on a back-to-back broadcast
+            # that the phasing check didn't split) - otherwise every later
+            # planned chart would be lost.
+            el = self.rec_elapsed
+            over = el > HOLD_MAX_S
             if over and self.force_end is not None:
-                self.logf(f"auto: recording has run {el / 60:.0f} min, past its expected end - "
+                self.logf(f"auto: recording has run {el / 60:.0f} min, longer than any single chart - "
                           f"ending it for {due.start:%H:%M}Z {due.short}")
                 self._forced_t = time.time()
                 self._hold_logged = False
@@ -626,6 +632,8 @@ class AutoScheduler:
             due.state = "skipped"                    # too late to catch the start
             return
         if self.current is not None and self.current.state == "tuned":
+            if now < self.current.end:
+                self.current.abandoned = True
             self._close(self.current)
         self.cat.tune(due.dial)
         due.state = "tuned"
