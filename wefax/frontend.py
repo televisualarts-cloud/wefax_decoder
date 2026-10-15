@@ -36,6 +36,12 @@ class Detector:
         self.demod = dsp.StreamDemod(fs)
         self.pending = np.zeros(0)
         self.pre = collections.deque(maxlen=int(preroll_s / self.BLOCK_S))
+        # idle lookback: audio, demodulated frequency and signal presence of
+        # every block since the last recording, so a chart whose start tone
+        # and phasing were both missed can still be recorded from its start
+        self.look = collections.deque(maxlen=int(self.LOOKBACK_S / self.BLOCK_S))
+        self.img_votes = collections.deque(maxlen=self.IMG_VOTES)
+        self.idle_since = 0.0
         self.fhist = collections.deque(maxlen=int(6.0 / self.BLOCK_S))
         self.state = "idle"
         self.rec: list[np.ndarray] = []
@@ -126,6 +132,7 @@ class Detector:
 
         if self.state == "idle":
             self.pre.append(a)
+            self.look.append((a.astype(np.float32), f, label != "noise"))
             self._noise_view(f)
             if self.start_run >= 6:
                 self._begin("start tone", 576 if self.start_kind == "start576" else 288)
@@ -136,6 +143,8 @@ class Detector:
                     self.phase_hits = 0
                 if self.phase_hits >= 3:
                     self._begin("phasing", None)
+                elif self._image_now():
+                    self._begin_from_lookback()
         else:
             self.rec.append(a)
             self.rec_n += len(a)
@@ -276,7 +285,46 @@ class Detector:
             self.phase_hits = 0
         return self.phase_hits >= self.SPLIT_HITS
 
-    def _begin(self, trigger: str, ioc, seed=None):
+    # ------------------------------------------------------------------
+    # A chart already on air (start tone and phasing missed): a fax picture
+    # repeats from line to line - borders, grid lines, isobars - so the
+    # demodulated frequency correlates at exactly one line period, which
+    # noise, an idle carrier and fading do not.
+    LOOKBACK_S = 300.0    # how far back a chart found this way may be recorded from
+    IMG_VOTES = 25        # 1 s checks considered ...
+    IMG_NEED = 15         # ... and how many must look like a picture
+    IMG_SCORE = 0.12      # line-period correlation above the off-period level
+    IMG_QUIET_S = 60.0    # not straight after a recording (its own tail)
+    GAP_S = 15.0          # this long without signal separates two transmissions
+
+    def _image_now(self) -> bool:
+        if self.block_count % 4 or len(self.look) < int(8 / self.BLOCK_S):
+            return False
+        if self.samples_seen / self.fs - self.idle_since < self.IMG_QUIET_S:
+            return False
+        f = np.concatenate([b[1] for b in list(self.look)[-int(8 / self.BLOCK_S):]])
+        self.img_votes.append(line_score(f, self.fs) > self.IMG_SCORE)
+        return sum(self.img_votes) >= self.IMG_NEED
+
+    def _begin_from_lookback(self):
+        look = list(self.look)
+        # back to where the signal started: the end of the last gap of
+        # GAP_S with (almost) no signal, then the usual pre-roll before it
+        gap = int(self.GAP_S / self.BLOCK_S)
+        start, quiet = 0, 0
+        for i in range(len(look) - 1, -1, -1):
+            quiet = 0 if look[i][2] else quiet + 1
+            if quiet >= gap:
+                start = i + quiet
+                break
+        start = max(0, start - self.pre.maxlen)
+        seed = look[start:]
+        back = len(seed) * self.BLOCK_S
+        self.log(f"[{time.strftime('%H:%M:%S')}] picture on air with no start tone or phasing heard - "
+                 f"recording from {back:.0f} s back")
+        self._begin("picture", None, seed=[b[0] for b in seed], fseed=[b[1] for b in seed], back_s=back)
+
+    def _begin(self, trigger: str, ioc, seed=None, fseed=None, back_s=0.0):
         self.state = "receiving"
         self._finish_req = None
         self.deadline = None
@@ -285,6 +333,8 @@ class Detector:
         self.rec_n = sum(len(b) for b in self.rec)
         self.rec_start_abs = self.samples_seen - self.rec_n
         self.pre.clear()
+        self.look.clear()
+        self.img_votes.clear()
         self.stop_run = 0
         self.stop_hist.clear()
         self.invalid_run = 0
@@ -293,11 +343,12 @@ class Detector:
         self.paper_hist = collections.deque(maxlen=int((self.EOF_PAPER_S + self.EOF_WIN_S) / self.BLOCK_S))
         self._tail = None
         self.rec_meta = {"trigger": trigger, "ioc": ioc,
-                         "utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                         "utc": datetime.fromtimestamp(time.time() - back_s, timezone.utc)
+                                        .strftime("%Y-%m-%dT%H:%M:%SZ"),
                          "t0_samples": self.samples_seen}
         if self.on_preview is not None:
             self.preview = LivePreview(self.fs)
-            for fb in list(self.fbuf)[-len(self.rec):] if self.rec else []:
+            for fb in fseed if fseed is not None else (list(self.fbuf)[-len(self.rec):] if self.rec else []):
                 self.preview.add(fb)
         self.log(f"[{time.strftime('%H:%M:%S')}] receiving (trigger: {trigger}, IOC {ioc or '?'})")
         self.on_status(self.status())
@@ -348,6 +399,9 @@ class Detector:
                 meta["timeline"] = tl
         self.state = "idle"
         self.deadline = None
+        self.idle_since = self.samples_seen / self.fs
+        self.look.clear()
+        self.img_votes.clear()
         self.rec, self.rec_n = [], 0
         self._tail = None
         self.preview = None
@@ -358,6 +412,29 @@ class Detector:
         else:
             self.log("  too short to be a fax - discarded")
         self.on_status(self.status())
+
+
+def line_score(f: np.ndarray, fs: float, lpms=(120, 60, 90, 240)) -> float:
+    """How strongly the demodulated frequency repeats at one line period,
+    over and above its correlation at other lags (fades, drift, an idle
+    carrier and noise score ~0; a chart 0.15-0.9)."""
+    k = max(1, int(fs * 0.005))
+    m = f[:len(f) // k * k].reshape(-1, k).mean(axis=1)
+    m = m - np.convolve(m, np.ones(41) / 41, "same")     # drop slow fades / level drift
+
+    def r(lag):
+        a, b = m[:-lag], m[lag:]
+        return float(np.dot(a, b) / np.sqrt(np.dot(a, a) * np.dot(b, b) + 1e-9))
+
+    best = -1.0
+    for lpm in lpms:
+        lag = int(round(60.0 / lpm / 0.005))
+        if 3 * lag > len(m):
+            continue
+        on = max(r(l) for l in (lag - 1, lag, lag + 1))
+        off = float(np.median([abs(r(int(lag * q))) for q in (0.61, 0.73, 0.87, 1.17, 1.31, 1.43)]))
+        best = max(best, on - off)
+    return best
 
 
 def phasing_like(f: np.ndarray, fs: float) -> bool:

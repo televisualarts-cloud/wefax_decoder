@@ -8,8 +8,10 @@ stop tone and the black are both missed, the recording is closed a few
 seconds after the chart should have ended instead of running on and holding
 up the auto-scheduler.
 
-Charts never seen ending cleanly fall back to the schedule: the next slot of
-the same station (the next chart's start tone would normally end it anyway).
+Charts never seen ending cleanly fall back to the schedule: shortly before
+the next slot of the same station, so the receiver is free (and on the
+right frequency, if the auto-scheduler wants another station) when the next
+chart's start tone arrives. Decoding runs separately and never blocks that.
 """
 from __future__ import annotations
 
@@ -21,7 +23,7 @@ from pathlib import Path
 KEEP = 8                 # most recent measurements kept per chart
 CLEAN_ENDS = ("stop tone", "end-of-frame black")
 LEARNT_MARGIN_S = 20.0   # after the learnt image end: covers stop tone + black
-SCHEDULE_MARGIN_S = 60.0  # after the next slot's start, when nothing is learnt
+SCHEDULE_LEAD_S = 15.0   # before the next slot's start, when nothing is learnt
 PREROLL_S = 12.0         # Detector default; only used to read old fax records
 STOP_TAIL_S = 12.5       # stop-tone recordings run on ~10 s + detection lag
 
@@ -77,7 +79,7 @@ class ChartLengths:
             return end + timedelta(seconds=LEARNT_MARGIN_S), "learnt", end
         nxt = next_slot_minutes(sched, short, slot)
         if nxt is not None:
-            return t0 + timedelta(minutes=nxt, seconds=SCHEDULE_MARGIN_S), "schedule", None
+            return t0 + timedelta(minutes=nxt, seconds=-SCHEDULE_LEAD_S), "schedule", None
         return None
 
     # ------------------------------------------------------------------
