@@ -31,6 +31,7 @@ from wefax import dsp, decode, enhance, server
 from wefax.schedule import Schedules, slug
 from wefax import label
 from wefax import housekeep
+from wefax.lengths import ChartLengths, CLEAN_ENDS
 from wefax.frontend import Detector, LiveCapture
 
 try:
@@ -309,18 +310,27 @@ class Processor:
         except Exception as e:
             log.info("station copy failed: %s", e)
         self.hub.publish("fax", {"id": stem})
+        lengths = getattr(self, "lengths", None)
+        end_ts = meta.get("chart_end_ts")
+        if lengths is not None and end_ts and product and product.get("slot") \
+                and str(meta.get("end_reason", "")).startswith(CLEAN_ENDS):
+            lengths.learn(product["short"], product["slot"], datetime.fromtimestamp(end_ts, timezone.utc))
         if getattr(self, "auto", None) is not None:
             self.auto.on_fax(product, res["meta"], meta.get("utc", ""))
 
 
-def station_info(sched, cat, station, s) -> dict:
+def station_info(sched, cat, station, s, auto=None) -> dict:
     """Frequency / station / current-or-next chart for the status line."""
     now = datetime.now(timezone.utc)
     info = cat.status() if cat else {}
     dial = info.get("dial_khz")
+    if dial is None and auto is not None and auto.current is not None:
+        station = auto.current.station      # frequency unknown: what the scheduler tuned
     if s.get("state") == "receiving":
         start = now.timestamp() - float(s.get("elapsed", 0))
-        p = sched.identify(datetime.fromtimestamp(start, timezone.utc), dial, station)
+        # same rules as naming the saved fax: the plan, unless CAT clearly says otherwise
+        p = identify(sched, cat, station, datetime.fromtimestamp(start, timezone.utc)
+                     .strftime("%Y-%m-%dT%H:%M:%SZ"), auto)
         if p:
             info["station"] = p["short"]
             if p.get("slot"):
@@ -456,6 +466,11 @@ def main():
     hub.settings["station"] = args.station
     proc = Processor(out, hub, args, sched, cat)
     proc.auto = auto
+    lengths = None
+    if not args.wav:                      # live only: chart ends are timed by the PC clock
+        lengths = ChartLengths(out, log=log.info)
+        proc.lengths = lengths
+        auto.planner.lengths = lengths
     if not args.wav:
         auto.start()
 
@@ -482,7 +497,7 @@ def main():
     def status_cb(s):
         if s.get("state") == "idle" and proc.busy:
             s = dict(s, state="decoding")
-        s = dict(s, **station_info(sched, cat, hub.settings.get("station"), s))
+        s = dict(s, **station_info(sched, cat, hub.settings.get("station"), s, auto))
         auto.on_status(s)
         hub.publish("status", s)
 
@@ -493,9 +508,35 @@ def main():
     hub.capture = cap
     auto.force_end = lambda reason: cap.detector and cap.detector.request_finish(reason)
 
+    def set_deadline(det):
+        """Once a recording has started: when should this chart be over?"""
+        meta = dict(det.rec_meta)
+        rec_id = meta.get("t0_samples")
+        p = identify(sched, cat, hub.settings.get("station"), meta.get("utc"), auto)
+        if not (p and p.get("slot")):
+            return rec_id
+        dl = lengths.deadline(sched, p["short"], p["slot"], parse_utc(meta["utc"]))
+        if dl is None:
+            return rec_id
+        when, how, end = dl
+        if det.state == "receiving" and det.rec_meta.get("t0_samples") == rec_id:
+            det.deadline = (when.timestamp(), end.timestamp() if end else None,
+                            f"{p['short']} {p['slot']}Z, {how}")
+            log.info("receiving %s %sZ: will close by %s UTC at the latest (%s length)",
+                     p["short"], p["slot"], when.strftime("%H:%M:%S"), how)
+        return rec_id
+
     def watcher():          # tells the live panel whether a chart is expected now
         last = None
+        done_rec = None
         while True:
+            try:
+                det = cap.detector
+                if det is not None and det.state == "receiving" and det.deadline is None \
+                        and det.rec_meta.get("t0_samples") != done_rec:
+                    done_rec = set_deadline(det)
+            except Exception as e:
+                log.info("deadline error: %s", e)
             try:
                 w = expected_now(sched, cat, hub.settings.get("station"), auto)
                 cap.detector.watch = w

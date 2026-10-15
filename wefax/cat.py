@@ -39,6 +39,9 @@ class CatReader:
         self.smeter: int | None = None
         self.connected = False
         self.history = collections.deque(maxlen=3600)      # (unix time, freq_hz)
+        self.last_ok = 0.0          # time of the last good frequency reply
+        self.stale = False          # connected, but no frequency reply for STALE_S
+        self._want: tuple | None = None   # (hz, time sent, retries) of the last tune
         self._ser = None
         self._lock = threading.Lock()
         self._stop = False
@@ -62,7 +65,15 @@ class CatReader:
         self.connected = True
         self.log(f"CAT: connected to SDR Console on {self.port} (RX {RX_LETTERS.index(self.letter) + 1})")
 
-    def _query(self, cmd: str) -> str | None:
+    STALE_S = 10.0       # no frequency reply this long -> frequency unknown
+    TUNE_CHECK_S = 4.0   # after a tune, the radio should report the new frequency by then
+
+    def _query(self, cmd: str, prefix: str) -> str | None:
+        """Send a query and return its reply. Anything left over from an
+        earlier command (a late reply, an echo of a set command) is thrown
+        away first and any reply that is not for this query is skipped, so
+        one stray reply can never shift every later reading by one."""
+        self._ser.reset_input_buffer()
         self._ser.write(cmd.encode("ascii"))
         buf = b""
         t0 = time.time()
@@ -72,11 +83,11 @@ class CatReader:
                 break
             buf += c
             if c == b";":
-                break
-        s = buf.decode("ascii", "replace").strip()
-        if not s or s.startswith("?"):
-            return None
-        return s
+                s = buf.decode("ascii", "replace").strip()
+                if s.startswith(prefix):
+                    return s
+                buf = b""               # someone else's reply: keep reading
+        return None
 
     def _close(self):
         self.connected = False
@@ -108,18 +119,32 @@ class CatReader:
                 for p in pend:
                     self._ser.write(p)
                     time.sleep(0.05)
-                r = self._query(f"F{self.letter};")
-                if r and r.startswith("F" + self.letter) and r[2:-1].isdigit():
+                if pend:
+                    time.sleep(0.2)             # let SDR Console act on the set command
+                r = self._query(f"F{self.letter};", "F" + self.letter)
+                if r and r[2:-1].isdigit():
                     self.freq_hz = int(r[2:-1])
                     self.history.append((time.time(), self.freq_hz))
-                r = self._query("MD;")
-                if r and r.startswith("MD") and r[2:-1].isdigit():
+                    self.last_ok = time.time()
+                    if self.stale:
+                        self.stale = False
+                        self.log(f"CAT: frequency replies are back ({self.freq_hz / 1000:.2f} kHz)")
+                    self._check_tune()
+                elif time.time() - self.last_ok > self.STALE_S and not self.stale:
+                    # do not keep showing (and identifying charts by) an old reading
+                    self.stale = True
+                    self.freq_hz = None
+                    self.log(f"CAT: no frequency reply from SDR Console for {self.STALE_S:.0f} s - "
+                             f"frequency unknown until it answers again")
+                r = self._query("MD;", "MD")
+                if r and r[2:-1].isdigit():
                     self.mode = int(r[2:-1])
-                r = self._query("SM0;")
-                if r and r.startswith("SM") and r[2:-1].isdigit():
+                r = self._query("SM0;", "SM")
+                if r and r[2:-1].isdigit():
                     self.smeter = int(r[2:-1][-4:])
             except Exception as e:
                 self._close()
+                self.freq_hz, self.stale = None, False    # unknown while disconnected
                 if not warned:
                     self.log(f"CAT: no connection on {self.port} ({e.__class__.__name__}: {e}) - retrying")
                     warned = True
@@ -144,13 +169,33 @@ class CatReader:
             return None          # no reading near that time: don't guess from the current one
         return best[1] / 1000.0
 
-    def tune(self, khz: float, usb: bool = True):
+    def tune(self, khz: float, usb: bool = True, _retry: int = 0):
         """Set the receiver (sent on the polling thread)."""
         hz = int(round(khz * 1000))
         cmds = [f"F{self.letter}{hz:011d};".encode()] + ([b"MD2;"] if usb else [])
         with self._lock:
             self._pending.extend(cmds)
+            self._want = (hz, time.time(), _retry, usb)
         self.log(f"CAT: sent {b''.join(cmds).decode()}")
+
+    def _check_tune(self):
+        """After a tune: confirm the radio went there; resend once, then say so."""
+        w = self._want
+        if w is None:
+            return
+        hz, t, retry, usb = w
+        if abs(self.freq_hz - hz) <= 20:
+            self._want = None
+            return
+        if time.time() - t < self.TUNE_CHECK_S:
+            return
+        if retry == 0:
+            self.log(f"CAT: SDR Console reports {self.freq_hz / 1000:.2f} kHz, not {hz / 1000:.2f} - tuning again")
+            self.tune(hz / 1000.0, usb, _retry=1)
+        else:
+            self._want = None
+            self.log(f"CAT: WARNING - SDR Console stays on {self.freq_hz / 1000:.2f} kHz after tuning to "
+                     f"{hz / 1000:.2f} kHz (receiver {RX_LETTERS.index(self.letter) + 1})")
 
     def wait_for(self, khz: float, timeout: float = 3.0) -> bool:
         """True once SDR Console reports the requested frequency."""
@@ -163,7 +208,7 @@ class CatReader:
         return False
 
     def status(self) -> dict:
-        return {"cat": self.connected, "cat_port": self.port,
+        return {"cat": self.connected, "cat_port": self.port, "cat_stale": self.stale,
                 "dial_khz": None if self.freq_hz is None else round(self.freq_hz / 1000.0, 2),
                 "usb": self.mode == 2 if self.mode is not None else None}
 

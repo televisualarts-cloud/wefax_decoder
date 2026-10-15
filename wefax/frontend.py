@@ -70,6 +70,12 @@ class Detector:
         self.npreview: LivePreview | None = None
         # set from another thread (the auto-scheduler) to end the recording
         self._finish_req: str | None = None
+        # set from outside once the chart is known: (epoch deadline, expected
+        # image end epoch or None, description). Past the deadline the
+        # recording is closed even if no stop tone or black was seen.
+        self.deadline: tuple | None = None
+        self.eof_hist = collections.deque(maxlen=int(self.EOF_WIN_S / self.BLOCK_S))
+        self.paper_hist = collections.deque(maxlen=int((self.EOF_PAPER_S + self.EOF_WIN_S) / self.BLOCK_S))
 
     # ------------------------------------------------------------------
     def feed(self, x: np.ndarray, t: float | None = None, overflow: bool = False):
@@ -144,6 +150,8 @@ class Detector:
             elapsed = self.rec_n / self.fs
             if self.stop_run >= 6 and elapsed > 60:
                 # keep ~10 s after the stop tone for the end-of-frame black
+                if self._tail is None:
+                    self.rec_meta["chart_end_ts"] = time.time() - self.stop_run * self.BLOCK_S
                 self._tail = int(10 / self.BLOCK_S)
             if self._tail is not None:
                 self._tail -= 1
@@ -159,6 +167,10 @@ class Detector:
             elif self._finish_req is not None:
                 reason, self._finish_req = self._finish_req, None
                 self._finish(reason)
+            elif self.deadline is not None and time.time() > self.deadline[0]:
+                self._end_by_deadline()
+            elif elapsed > self.SPLIT_MIN_S and self._end_of_frame(f):
+                pass                          # finished inside _end_of_frame
             elif elapsed > self.SPLIT_MIN_S and self.block_count % 4 == 0 and self._phasing_now():
                 # the next chart's phasing has started, but its start tone (and
                 # this chart's stop tone) were missed: close this chart and
@@ -190,11 +202,65 @@ class Detector:
             s["faded"] = self.invalid_run * self.BLOCK_S >= self.FADED_S
             s["ioc"] = self.rec_meta.get("ioc")
             s["trigger"] = self.rec_meta.get("trigger")
+            if self.deadline is not None:
+                s["ends_by"] = round(self.deadline[0])
         return s
 
     SPLIT_MIN_S = 150     # earliest point in a recording to look for the next chart's phasing
     SPLIT_HITS = 5        # consecutive 1 s phasing checks needed to split
     SPLIT_SEED_S = 20.0   # audio before the detection carried into the new recording
+
+    # End of a chart without a usable stop tone. Stations that keep the
+    # carrier up between charts (DWD sends white between broadcasts) never
+    # trigger 'signal lost', so a missed stop tone would otherwise leave the
+    # recording open until the next start tone or the length limit. Every
+    # chart ends with ~10 s of black after the stop tone; that is caught here.
+    EOF_WIN_S = 8.0       # look at the last 8 s ...
+    EOF_BLACK_FRAC = 0.8  # ... and end the chart when this much of it is solid black
+    EOF_KEEP_S = 1.0      # of the black kept at the end of the recording
+    EOF_PAPER_S = 60.0    # the minute before the black ...
+    EOF_PAPER_FRAC = 0.5  # ... must have been mostly white paper
+
+    def _end_of_frame(self, f: np.ndarray) -> bool:
+        # 5 ms averages: noise drops ~7x, chart detail and the phasing pulse remain
+        k = max(1, int(self.fs * 0.005))
+        m = f[:len(f) // k * k].reshape(-1, k).mean(axis=1)
+        med, q75 = np.percentile(m, (50, 75))
+        # weak signals read compressed towards mid-grey, so stay generous
+        self.eof_hist.append(med < -150.0 and q75 < 0.0)
+        self.paper_hist.append(med > 0.0)
+        h = self.eof_hist
+        if len(h) < h.maxlen or not h[-1] or sum(h) < self.EOF_BLACK_FRAC * len(h):
+            return False
+        # only after a chart on white paper: a dark image (white on black,
+        # satellite pictures) must not be cut off at its first dark patch
+        before = list(self.paper_hist)[:-len(h)]
+        if not before or sum(before) < self.EOF_PAPER_FRAC * len(before):
+            return False
+        # phasing is black too, but with a white pulse on every line: leave
+        # that to the phasing split (and do not end a chart on its own phasing)
+        if phasing_like(np.concatenate(self.fhist), self.fs):
+            return False
+        # trim back to just after the first black block of the window
+        first = next(i for i, b in enumerate(h) if b)
+        cut = len(h) - first - int(self.EOF_KEEP_S / self.BLOCK_S)
+        self.rec_meta["chart_end_ts"] = time.time() - (len(h) - first) * self.BLOCK_S
+        if cut > 0:
+            self.rec = self.rec[:-cut]
+        self._finish("end-of-frame black (no stop tone)")
+        return True
+
+    DEADLINE_KEEP_S = 6.0  # after the expected image end, when ending by deadline
+
+    def _end_by_deadline(self):
+        _, end_ts, what = self.deadline
+        if end_ts is not None:
+            # drop what came after the chart should have ended (idle carrier,
+            # noise) but keep a few seconds in case it ran a little long
+            extra = int((time.time() - end_ts - self.DEADLINE_KEEP_S) / self.BLOCK_S)
+            if 0 < extra < len(self.rec) - int(60 / self.BLOCK_S):
+                self.rec = self.rec[:-extra]
+        self._finish(f"expected length ({what})")
 
     def request_finish(self, reason: str = "ended by scheduler"):
         """Ask for the current recording to end (safe from another thread)."""
@@ -213,6 +279,7 @@ class Detector:
     def _begin(self, trigger: str, ioc, seed=None):
         self.state = "receiving"
         self._finish_req = None
+        self.deadline = None
         self.npreview = None
         self.rec = list(seed) if seed is not None else list(self.pre)
         self.rec_n = sum(len(b) for b in self.rec)
@@ -222,6 +289,8 @@ class Detector:
         self.stop_hist.clear()
         self.invalid_run = 0
         self.phase_hits = 0
+        self.eof_hist = collections.deque(maxlen=int(self.EOF_WIN_S / self.BLOCK_S))
+        self.paper_hist = collections.deque(maxlen=int((self.EOF_PAPER_S + self.EOF_WIN_S) / self.BLOCK_S))
         self._tail = None
         self.rec_meta = {"trigger": trigger, "ioc": ioc,
                          "utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -278,6 +347,7 @@ class Detector:
             if len(tl) > 50:
                 meta["timeline"] = tl
         self.state = "idle"
+        self.deadline = None
         self.rec, self.rec_n = [], 0
         self._tail = None
         self.preview = None

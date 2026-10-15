@@ -111,6 +111,7 @@ Everything is written under `./faxes/` (change this with `--out`):
 | `stations/<station>/<chart>.png` | The latest copy of each chart, e.g. `stations/Northwood/Surface-Analysis.png`. A newer issue replaces it; a repeat of the same issue only replaces it if it decoded better. The `.json` beside it gives its quality and time |
 | `<name>.json` | Decode details: station and chart, IOC, LPM, AFC, clock ppm, quality, tears, etc. |
 | `proplog.jsonl` | The auto-scheduler's log of every attempt (SNR, quality) |
+| `chart_lengths.json` | How long each chart runs, learnt from charts that ended on their stop tone or end-of-frame black. A recording is closed 20 s after its chart should have ended (or 15 s before the next slot, for charts not yet learnt), so a faded chart never holds up the auto-scheduler |
 | `settings.json` | Your audio input, CAT port, 1st/2nd priority stations and how many days to keep |
 
 Audio is not kept unless you add `--save-audio`.

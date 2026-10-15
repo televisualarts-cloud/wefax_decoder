@@ -341,6 +341,7 @@ class Planner:
         self.sched, self.log, self.qth, self.dx = sched, log, qth, dx
         self.rng = rng or random.Random()
         self.core = core_weights(priorities or DEFAULT_PRIORITIES)
+        self.lengths = None    # ChartLengths, set by the main program
 
     def _occurrences(self, st: Station, now: datetime, horizon_h: float):
         """(start, end, slot, [khz options]) for every slot in the window."""
@@ -358,6 +359,9 @@ class Planner:
             for m, (sl, khz) in by_minute.items():
                 start = day0 + timedelta(days=d, minutes=m)
                 end = start + timedelta(minutes=durs.get(m, 11))
+                learnt = self.lengths.learnt_s(st.short, sl.hhmm) if self.lengths else None
+                if learnt is not None:     # how long this chart really runs
+                    end = start + timedelta(seconds=learnt + 30)
                 if end > now and start < now + timedelta(hours=horizon_h):
                     out.append((start, end, sl, sorted(khz)))
         return sorted(out, key=lambda x: x[0])

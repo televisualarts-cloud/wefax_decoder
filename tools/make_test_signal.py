@@ -70,10 +70,19 @@ def main():
     ap.add_argument("--qrn", type=float, default=0.6, help="crashes per second")
     ap.add_argument("--no-start", action="store_true")
     ap.add_argument("--lead", type=float, default=12.0, help="seconds of noise before")
+    ap.add_argument("--invert", action="store_true", help="white-on-black chart (dark imagery)")
+    ap.add_argument("--no-stop", action="store_true", help="omit the 450 Hz stop tone")
+    ap.add_argument("--no-phasing", action="store_true", help="omit the phasing lines")
+    ap.add_argument("--no-black", action="store_true", help="omit the end-of-frame black")
+    ap.add_argument("--idle", type=float, default=0.0,
+                    help="seconds of idle carrier after the end-of-frame black (DWD style)")
+    ap.add_argument("--idle-level", type=float, default=1.0, help="idle carrier level, 0 black .. 1 white")
     args = ap.parse_args()
 
     W, lpm = 1810, 120
     chart = make_chart(W, args.lines)
+    if args.invert:
+        chart = 1.0 - chart
     np.save(args.out.rsplit(".", 1)[0] + "_truth.npy", chart)
     Tl = 60.0 / lpm
     sr = args.sr
@@ -83,10 +92,15 @@ def main():
         segs.append(("noise", args.lead))
         if not args.no_start:
             segs.append(("start", 5.0))
-        segs.append(("phasing", 30.0))
+        if not args.no_phasing:
+            segs.append(("phasing", 30.0))
         segs.append(("image", args.lines * Tl))
-        segs.append(("stop", 5.0))
-        segs.append(("black", 10.0))
+        if not args.no_stop:
+            segs.append(("stop", 5.0))
+        if not args.no_black:
+            segs.append(("black", 10.0))
+        if args.idle > 0:
+            segs.append(("idle", args.idle))
         segs.append(("noise", 5.0))
         return segs
 
@@ -109,6 +123,8 @@ def main():
             v[m] = (np.floor(tt * 450 * 2) % 2 == 0)
         elif kind == "black":
             v[m] = 0
+        elif kind == "idle":
+            v[m] = args.idle_level
         elif kind == "phasing":
             ph = (tt / Tl) % 1.0
             v[m] = (ph > 0.95)                         # 5 % white pulse ending at the line start

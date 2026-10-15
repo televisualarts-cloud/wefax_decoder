@@ -426,6 +426,7 @@ function tuned(s) {
   const parts = [];
   if (s.dial_khz) parts.push(s.dial_khz.toFixed(2) + ' kHz' + (s.usb === false ? ' (not USB!)' : ''));
   else if (s.cat === false) parts.push('CAT --');
+  else if (s.cat_stale) parts.push('CAT: no frequency reply');
   if (s.station) parts.push(s.station);
   if (s.state !== 'receiving' && s.next) parts.push(`next ${s.next} in ${s.next_in} min`);
   $('tuned').textContent = parts.join('  ·  ');
