@@ -188,6 +188,9 @@ The auto-scheduler needs CAT. Press **AUTO** on the page, or start with
   The SNR logged for every attempt is measured while the chart is on air. A
   chart missed because an earlier recording was still running isn't counted
   against the frequency.
+- **Upgrading:** logs from versions before 16 Oct 2026 contain false failures (charts logged
+  as failed while a good signal was on air). The first start of a newer version removes
+  them once, keeping the original as `proplog_before_v2.jsonl`; nothing else is changed.
 - **Empty slots:** a priority-station slot that is silent three times while the same
   frequency decodes the charts either side is taken as not broadcast and left out of
   the plan, then tried again every 14 days (published schedules go out of date: in

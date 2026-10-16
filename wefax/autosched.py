@@ -20,6 +20,7 @@ Builds a rolling plan of which station/frequency to tune to and when:
 from __future__ import annotations
 
 import json
+import os
 import math
 import random
 import re
@@ -267,12 +268,53 @@ class PropLog:
         self._dead: dict[tuple, tuple] = {}         # (station, kHz) -> last silent failure
         self.slot_gaps: dict[tuple, int] = {}       # (station, slot) -> times found empty
         self.slot_last: dict[tuple, float] = {}     # (station, slot) -> last attempt
+        self.migrated = self._migrate()
         if self.path.exists():
             for line in self.path.read_text(encoding="utf-8", errors="replace").splitlines():
                 try:
                     self._apply(json.loads(line))
                 except Exception:
                     pass
+
+    LOG_VERSION = 2
+
+    def _migrate(self) -> str | None:
+        """One-time clean-up of logs written by versions before the fixes of
+        16 Oct 2026, which logged charts as failed while a good signal was on
+        air (stuck recordings, charts credited to the wrong slot) and gave
+        off-plan charts an SNR read after the chart had ended. Removes those
+        failures and blanks those SNRs; everything else is kept. The original
+        is kept as proplog_before_v2.jsonl and a marker stops it running again."""
+        marker = self.path.with_name(self.path.stem + f".v{self.LOG_VERSION}")
+        if marker.exists():
+            return None
+        if not self.path.exists():
+            marker.write_text("new log\n")
+            return None
+        lines = self.path.read_text(encoding="utf-8", errors="replace").splitlines()
+        out, dropped, blanked = [], 0, 0
+        for line in lines:
+            try:
+                r = json.loads(line)
+            except Exception:
+                out.append(line)
+                continue
+            if r.get("kind") == "core" and not r.get("quality") and (r.get("snr_db") or -99) > 3:
+                dropped += 1                      # failed with a good signal on air: not propagation
+                continue
+            if r.get("kind") == "manual" and r.get("snr_db") is not None:
+                r["snr_db"] = None                # read after the chart had ended
+                blanked += 1
+            out.append(json.dumps(r))
+        backup = self.path.with_name(self.path.stem + f"_before_v{self.LOG_VERSION}.jsonl")
+        if not backup.exists():
+            backup.write_bytes(self.path.read_bytes())
+        tmp = self.path.with_suffix(".jsonl.part")
+        tmp.write_text("\n".join(out) + ("\n" if out else ""), encoding="utf-8")
+        os.replace(tmp, self.path)
+        marker.write_text(f"cleaned: {dropped} false failures removed, {blanked} SNRs blanked\n")
+        return f"learning log tidied once: {dropped} false failures removed, {blanked} SNRs blanked " \
+               f"(original kept as {backup.name})"
 
     def _apply(self, r: dict):
         when = datetime.fromisoformat(r["utc"].replace("Z", "+00:00"))
@@ -633,6 +675,8 @@ class AutoScheduler:
         self.cat, self.logf = cat, log
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self.proplog = PropLog(Path(out_dir) / "proplog.jsonl")
+        if self.proplog.migrated:
+            log(self.proplog.migrated)
         self.settings_path = Path(out_dir) / "settings.json"
         self.priorities = self._load_priorities(sched)
         self.qth = tuple(qth)
