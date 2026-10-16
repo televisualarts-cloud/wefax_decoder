@@ -103,6 +103,8 @@ MIN_CORE_IMPORTANCE = 10
 
 LEAD_S = 75          # tune this long before the slot
 TAIL_S = 45          # extra time after the expected end
+SWITCH_GAP_S = 20    # charts of two stations can both be planned if the second starts this long after the first ends
+MIN_LEAD_S = 15      # ... and the receiver leaves the first no earlier than this before the second starts
 DECODE_WAIT_MAX_S = 20 * 60  # longest wait for a decode before an item is logged as failed
 HOLD_MAX_S = 25 * 60  # a recording longer than any single chart is ended for the next planned one
 RETRY_BONUS = 2000   # repeat of a priority chart whose first try failed: beats any other chart
@@ -635,23 +637,23 @@ class Planner:
 
     @staticmethod
     def _select(cands: list[Item], fixed: list[Item] | None = None) -> list[Item]:
-        """Greedy by score; an item needs its slot plus guard times free."""
+        """Greedy by score; an item needs its slot free.
+
+        Same station (Northwood every 12 minutes): just no overlap.  Another
+        station: the later chart must start at least SWITCH_GAP_S after the
+        earlier one's expected end - enough to retune before its start tone.
+        (Requiring the full 75 s tuning lead plus a tail here made e.g. DWD
+        18:00 clash with Northwood 17:48; DWD dropped out of the plan, a DX
+        probe was fitted into the gap, then DWD came back once Northwood
+        was over and took the receiver from the probe.)"""
         taken = list(fixed or [])
         keys = {t.key for t in taken}
+        gap = timedelta(seconds=SWITCH_GAP_S)
 
         def free(it):
-            a = it.start - timedelta(seconds=LEAD_S)
-            b = it.end + timedelta(seconds=TAIL_S)
             for t in taken:
-                if t.short == it.short:
-                    # same station, e.g. Northwood every 12 minutes: no tuning
-                    # margins needed between its charts, just no overlap
-                    if it.start < t.end and t.start < it.end:
-                        return False
-                    continue
-                ta = t.start - timedelta(seconds=LEAD_S)
-                tb = t.end + timedelta(seconds=TAIL_S)
-                if a < tb and ta < b:
+                g = timedelta(0) if t.short == it.short else gap
+                if it.start < t.end + g and t.start < it.end + g:
                     return False
             return True
         for it in sorted(cands, key=lambda x: -x.score):
@@ -880,6 +882,10 @@ class AutoScheduler:
             return
         if self.current is not None and self.current.state == "tuned":
             if now < self.current.end:
+                # not before the current chart is due to end, unless the next
+                # one is about to start (its tuning lead overlaps this chart)
+                if now < min(self.current.end, due.start - timedelta(seconds=MIN_LEAD_S)):
+                    return
                 self.current.abandoned = True
             self._close(self.current)
         self.cat.tune(due.dial)
@@ -927,12 +933,16 @@ class AutoScheduler:
         self.logf(f"auto: logged {it.short} {it.khz} kHz {it.slot}Z  SNR "
                   f"{'--' if snr is None else f'{snr:+.0f} dB'}  quality {quality:.2f} ({verdict})")
 
-    def item_at(self, when: datetime):
-        """The plan item the scheduler had tuned for at this time (or None)."""
+    def item_at(self, when: datetime, dial: float | None = None):
+        """The plan item the scheduler had tuned for at this time (or None).
+        dial: the frequency the recording was made on - an item tuned
+        there beats one the receiver had just left."""
         with self._lock:
             items = list(self.items)
         hits = [it for it in items if it.state in ("tuned", "closing", "done")
                 and it.start - timedelta(seconds=180) <= when <= it.end + timedelta(seconds=60)]
+        if dial is not None and any(abs(it.dial - dial) <= 1.5 for it in hits):
+            hits = [it for it in hits if abs(it.dial - dial) <= 1.5]
         # back-to-back charts overlap these windows: the one whose start is
         # nearest the start of reception is the chart being received (a new
         # start tone a minute after the last chart ended is the next chart)

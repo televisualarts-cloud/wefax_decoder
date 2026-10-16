@@ -169,6 +169,25 @@ class CatReader:
             return None          # no reading near that time: don't guess from the current one
         return best[1] / 1000.0
 
+    def dial_khz_during(self, t0: datetime | float, t1: datetime | float | None = None) -> float | None:
+        """The dial frequency (kHz) the receiver held for most of t0..t1
+        (t1 = now).  A recording that starts a second before a retune - the
+        picture check reaching back to the retune, or audio arriving a little
+        late - belongs to the frequency it was tuned to afterwards, not the
+        one read at its very first second."""
+        a = t0.timestamp() if isinstance(t0, datetime) else float(t0)
+        b = time.time() if t1 is None else (t1.timestamp() if isinstance(t1, datetime) else float(t1))
+        hist = list(self.history)
+        before = [(ts, f) for ts, f in hist if ts <= a]
+        inside = [(ts, f) for ts, f in hist if a < ts <= b]
+        if not inside:
+            return self.dial_khz_at(t0)
+        pts = ([(a, before[-1][1])] if before and a - before[-1][0] <= 120 else []) + inside
+        held: dict[int, float] = {}
+        for (ts, f), nxt in zip(pts, pts[1:] + [(b, None)]):
+            held[f] = held.get(f, 0.0) + max(0.0, min(nxt[0], b) - ts)
+        return max(held, key=held.get) / 1000.0
+
     def tune(self, khz: float, usb: bool = True, _retry: int = 0):
         """Set the receiver (sent on the polling thread)."""
         hz = int(round(khz * 1000))

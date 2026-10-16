@@ -50,7 +50,7 @@ def parse_utc(text):
         return None
 
 
-def identify(sched, cat, station, utc_text, auto=None, quiet=False):
+def identify(sched, cat, station, utc_text, auto=None, quiet=False, end=None):
     """Which chart is this?
 
     The station: the auto-scheduler's plan says what it tuned (unless CAT
@@ -60,15 +60,19 @@ def identify(sched, cat, station, utc_text, auto=None, quiet=False):
     reception - never just "the planned item that was still open", because
     a station sends charts the plan skipped (already collected, low
     importance) straight after the planned one.
+
+    The frequency is the one held for most of the recording (start to `end`,
+    default now): a recording that begins a second before a retune is not
+    named after the station the receiver was just leaving.
     """
     if sched is None or not utc_text:
         return None
     when = parse_utc(utc_text)
     if when is None:
         return None
-    dial = cat.dial_khz_at(when) if cat else None
+    dial = cat.dial_khz_during(when, end) if cat else None
     p = sched.identify(when, dial, station)
-    it = auto.item_at(when) if auto is not None else None
+    it = auto.item_at(when, dial) if auto is not None else None
     if it is not None and (dial is None or abs(dial - it.dial) <= 1.5 or not (p and p.get("slot"))):
         if dial is not None and abs(dial - it.dial) > 1.5 and not quiet:
             log.info("chart: CAT read %.1f kHz but the scheduler had tuned %s %.1f kHz - using the plan",
@@ -262,8 +266,11 @@ class Processor:
         img, conf = res["image"], res["conf"]
         enh, einfo = enhance.enhance(img, conf, scale=a.scale, use_ml=not a.no_ml,
                                      mode=a.mode, log=log.info)
+        t_start = parse_utc(meta.get("utc") or "")
+        t_end = t_start + timedelta(seconds=float(res["meta"].get("duration_s") or 0)) \
+            if t_start is not None and res["meta"].get("duration_s") else None
         product = identify(self.sched, self.cat, self.hub.settings.get("station"), meta.get("utc"),
-                           getattr(self, "auto", None))
+                           getattr(self, "auto", None), end=t_end)
         if product:
             log.info("chart: %s", describe(product))
         if meta.get("name"):

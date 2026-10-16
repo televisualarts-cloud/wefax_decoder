@@ -163,6 +163,8 @@ class Detector:
                 if self.block_count % 8 == 0:
                     self._update_preview()
             self.invalid_run = self.invalid_run + 1 if label == "noise" else 0
+            if self.block_count % 4 == 0 and len(self.fhist) == self.fhist.maxlen:
+                self.rec_img.append(line_score(np.concatenate(self.fhist), self.fs) > self.IMG_SCORE)
             if label != "noise" and self.block_count % 4 == 0:
                 self.rec_snr.append(10 * np.log10(max(self.band_ratio - 1.0, 1e-3)))
             # tolerate the odd misclassified block in a noisy stop tone
@@ -298,9 +300,28 @@ class Detector:
         return True
 
     DEADLINE_KEEP_S = 6.0  # after the expected image end, when ending by deadline
+    DEADLINE_EXTEND_MAX_S = 90.0  # a picture still on air at the deadline: wait up to this long for its end
+    PICTURE_STILL_N = 10          # 1 s line checks kept while receiving ...
+    PICTURE_STILL_NEED = 4        # ... this many passing = a picture is still coming in
 
     def _end_by_deadline(self):
-        _, end_ts, what = self.deadline
+        """Past the expected end.  If a picture is still coming in (the chart
+        runs longer than the schedule or its learnt length says), keep it: the
+        stop tone, the end-of-frame black or the next chart's start tone or
+        phasing will end it - the deadline only closes a recording whose
+        picture has gone (faded out, or its end was missed)."""
+        dl = self.deadline
+        first = dl[3] if len(dl) > 3 else dl[0]
+        now = time.time()
+        votes = list(getattr(self, "rec_img", []))
+        if now < first + self.DEADLINE_EXTEND_MAX_S and sum(votes) >= self.PICTURE_STILL_NEED:
+            if len(dl) <= 3:
+                self.log(f"[{time.strftime('%H:%M:%S')}] picture still on air at the expected end "
+                         f"({dl[2]}) - waiting for its stop tone")
+            # check again shortly; the picture was last seen now
+            self.deadline = (now + 2.0, now, dl[2], first)
+            return
+        end_ts, what = dl[1], dl[2]
         if end_ts is not None:
             # drop what came after the chart should have ended (idle carrier,
             # noise) but keep a few seconds in case it ran a little long
@@ -375,6 +396,7 @@ class Detector:
         self.img_votes.clear()
         self.stop_run = 0
         self.rec_snr = []
+        self.rec_img = collections.deque(maxlen=self.PICTURE_STILL_N)
         self.stop_hist.clear()
         self.invalid_run = 0
         self.phase_hits = 0

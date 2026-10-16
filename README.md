@@ -9,6 +9,8 @@ sharpens the chart, names it from the broadcast schedules, saves it to disk
 and shows it in a browser page. With SDR Console's CAT port it can also
 retune the radio through the day to collect the most important charts.
 
+![The decoder's page: a DWD chart being received, the live spectrum and waterfall top right, the auto-scheduler's plan and the last decoded chart](docs/images/screenshot-page.jpg)
+
 ## Features
 
 - Automatic detection of start tone, phasing and stop tone (IOC 576 and 288;
@@ -31,6 +33,24 @@ retune the radio through the day to collect the most important charts.
     "NO SIGNAL" when a chart is due but not heard, red when idle);
   - a thumbnail strip for each day;
   - Raw and Enhanced views, mouse-wheel zoom, and rotation.
+
+## Example charts
+
+Received in Plymouth, UK, decoded and enhanced by the app (decode quality
+shown in each title block):
+
+<table>
+<tr><th colspan="2">Northwood (GYA)</th></tr>
+<tr>
+<td width="50%" valign="top"><img src="docs/images/northwood-surface-analysis.jpg" width="100%" alt="Northwood surface analysis, 12Z run, received 15 Oct 2026 at 1436Z on 8040 kHz"><br>Surface analysis, 15 Oct 2026, 92 %</td>
+<td width="50%" valign="top"><img src="docs/images/northwood-surface-prognosis-t24.jpg" width="100%" alt="Northwood surface prognosis T+24, 12Z run, received 15 Oct 2026 at 1712Z on 8040 kHz"><br>Surface prognosis T+24, 15 Oct 2026, 96 %</td>
+</tr>
+<tr><th colspan="2">DWD Hamburg/Pinneberg</th></tr>
+<tr>
+<td width="50%" valign="top"><img src="docs/images/dwd-surface-weather-chart.jpg" width="100%" alt="DWD surface weather chart with station plots, received 14 Oct 2026 at 1050Z"><br>Surface weather chart, 14 Oct 2026, 94 %</td>
+<td width="50%" valign="top"><img src="docs/images/dwd-h60-surface-pressure.jpg" width="100%" alt="DWD H+60 GME surface pressure forecast, received 15 Oct 2026 at 0743Z"><br>H+60 (GME) surface pressure, 15 Oct 2026, 95 %</td>
+</tr>
+</table>
 
 ## Install
 
@@ -104,6 +124,12 @@ or weaker as the seasons change.
 
 Try not to interrupt reception or retune the radio manually, as this will upset
 the learning process.
+
+The console window logs what the app is doing: each retune by the
+auto-scheduler, each transmission found and how it ended, the decode steps
+(AFC, tones, phasing, slant) and the result logged for the learning:
+
+![The console log while running on AUTO](docs/images/screenshot-console.jpg)
 
 ## Saved files
 
