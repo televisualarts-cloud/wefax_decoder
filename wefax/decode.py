@@ -356,6 +356,30 @@ def residual_slant(v, s_first, T, K, W, block=160):
     return corr
 
 
+SEAM_MIN_CONF = 4.5   # line-start seam this distinct (std devs) is trusted
+
+
+def find_line_start(img: np.ndarray, gap: int = 2):
+    """Column where each line really starts, for charts heard without phasing.
+
+    Within a picture, neighbouring columns are strongly alike (isobars, coasts
+    and grid lines run across them). Where one transmitted line ends and the
+    next begins they are unrelated, so the correlation between columns a
+    couple of pixels apart drops sharply at exactly that column. Unlike a
+    margin search this works on charts printed edge to edge (Northwood).
+    Returns (column, confidence in standard deviations)."""
+    x = img.astype(np.float64)
+    x = x - x.mean(axis=0)
+    W = x.shape[1]
+    b = np.roll(x, -gap, axis=1)
+    r = (x * b).sum(axis=0) / (np.sqrt((x * x).sum(axis=0) * (b * b).sum(axis=0)) + 1e-9)
+    straddle = np.convolve(np.r_[r[-gap:], r], np.ones(gap), "valid")[:W] / gap
+    c = int(np.argmin(straddle))
+    conf = float((np.median(straddle) - straddle[c]) / (np.std(straddle) + 1e-9))
+    start = (c + 1) % W
+    return start, conf
+
+
 def find_margin(img: np.ndarray) -> int:
     """Column index of the quietest band (the margin) for images w/o phasing."""
     act = img.std(axis=0)
@@ -630,10 +654,18 @@ def decode_recording(audio: np.ndarray, fs: float, ioc=None, lpm=None,
         T = T2
     corr = residual_slant(v, s_first, T, K, W)
     starts = s_first + np.arange(K) * T + corr
+    align_how, align_conf = "phasing", None
     if not ph:
-        # put the quietest band (margin) at the edges
-        pos = starts[::4, None] + np.arange(W)[None, :] * (T / W)
-        m = find_margin(_gather(v, pos))
+        # no phasing heard: find where each line starts from the picture itself
+        pos = starts[:, None] + np.arange(W)[None, :] * (T / W)
+        pic = _gather(v, pos)
+        m, align_conf = find_line_start(pic)
+        if align_conf >= SEAM_MIN_CONF:
+            align_how = "seam"
+        else:
+            m = find_margin(pic[::4])          # last resort: the quietest band
+            align_how = "uncertain"
+        log(f"line start: column {m} from the picture ({align_how}, confidence {align_conf:.1f})")
         starts = starts + m * T / W
     K = int(np.sum(starts + T < n))
     starts = starts[:K]
@@ -662,12 +694,19 @@ def decode_recording(audio: np.ndarray, fs: float, ioc=None, lpm=None,
         log("tears corrected: " + ", ".join(f"line {r} ({s:+d} px)" for r, s in tears))
 
     quality = float(np.mean(cimg > 0.5))
+    if align_how == "uncertain":
+        # the chart may be split sideways: never let it count as a good copy
+        # (it would replace the station copy and mark the chart as collected)
+        quality *= 0.5
+        log(f"WARNING: line start not found reliably - chart may be shifted sideways; "
+            f"quality reduced to {quality:.2f}")
     return {
         "image": img, "conf": cimg,
         "meta": {
             "ioc": int(ioc), "lpm": int(lpm), "width": W, "lines": int(K),
             "afc_hz": round(afc_hz, 1), "drift_pp_hz": round(drift_pp, 1),
-            "clock_ppm": round(clock_ppm, 1), "phasing": bool(ph),
+            "clock_ppm": round(clock_ppm, 1), "phasing": bool(ph), "align": align_how,
+            "align_conf": None if align_conf is None else round(align_conf, 1),
             "start_tone": tones["start"] is not None, "stop_tone": tones["stop"] is not None,
             "tears": [[int(r), int(s)] for r, s in tears],
             "gaps_filled_ms": [round(n_ / fs * 1000, 1) for _, n_ in gaps],

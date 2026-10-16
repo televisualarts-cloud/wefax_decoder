@@ -153,6 +153,8 @@ class Detector:
                 if self.block_count % 8 == 0:
                     self._update_preview()
             self.invalid_run = self.invalid_run + 1 if label == "noise" else 0
+            if label != "noise" and self.block_count % 4 == 0:
+                self.rec_snr.append(10 * np.log10(max(self.band_ratio - 1.0, 1e-3)))
             # tolerate the odd misclassified block in a noisy stop tone
             self.stop_hist.append(label == "stop")
             self.stop_run = sum(self.stop_hist)
@@ -336,6 +338,7 @@ class Detector:
         self.look.clear()
         self.img_votes.clear()
         self.stop_run = 0
+        self.rec_snr = []
         self.stop_hist.clear()
         self.invalid_run = 0
         self.phase_hits = 0
@@ -392,6 +395,8 @@ class Detector:
     def _finish(self, reason: str):
         audio = np.concatenate(self.rec) if self.rec else np.zeros(0)
         meta = dict(self.rec_meta, end_reason=reason)
+        if len(getattr(self, "rec_snr", [])) >= 5:
+            meta["snr_db"] = round(float(np.median(self.rec_snr)), 1)   # while the chart was on air
         if self.timeline and len(audio):
             a0, a1 = self.rec_start_abs, self.rec_start_abs + len(audio)
             tl = [(i - a0, t, o) for i, t, o in self.timeline if a0 <= i <= a1]

@@ -42,7 +42,38 @@ SITES = {
     "RioDeJaneiro": (-22.90, -43.20), "Valparaiso": (-33.00, -71.60), "Charleville": (-26.40, 146.25),
     "Wiluna": (-26.60, 120.20), "Wellington": (-41.30, 174.80),
 }
+DEFAULT_QTH = (50.37, -4.14)               # Plymouth, UK - used until a location is set
 DEFAULT_PRIORITIES = ["Northwood", "DWD"]   # 1st and 2nd priority stations (changeable on the page)
+
+
+def parse_qth(text) -> tuple[float, float]:
+    """Receiver location from 'lat, lon' (decimal degrees, S and W negative)
+    or a Maidenhead locator ('IO70', 'IO70ri', 'IO70ri45')."""
+    t = str(text).strip()
+    m = re.fullmatch(r"([A-Ra-r]{2})(\d{2})(?:([A-Xa-x]{2})(?:(\d{2}))?)?", t.replace(" ", ""))
+    if m:
+        a, n, s, e = m.groups()
+        a = a.upper()
+        lon = (ord(a[0]) - 65) * 20 - 180 + int(n[0]) * 2
+        lat = (ord(a[1]) - 65) * 10 - 90 + int(n[1])
+        wl, wa = 2.0, 1.0                                   # size of the square so far
+        if s:
+            s = s.lower()
+            lon += (ord(s[0]) - 97) * 5 / 60
+            lat += (ord(s[1]) - 97) * 2.5 / 60
+            wl, wa = 5 / 60, 2.5 / 60
+            if e:
+                lon += int(e[0]) * 0.5 / 60
+                lat += int(e[1]) * 0.25 / 60
+                wl, wa = 0.5 / 60, 0.25 / 60
+        return round(lat + wa / 2, 4), round(lon + wl / 2, 4)     # centre of the square
+    parts = [p for p in re.split(r"[,\s;]+", t) if p]
+    if len(parts) != 2:
+        raise ValueError("give 'lat, lon' or a Maidenhead locator")
+    lat, lon = float(parts[0]), float(parts[1])
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        raise ValueError("latitude -90..90, longitude -180..180")
+    return round(lat, 4), round(lon, 4)
 
 
 def core_weights(priorities) -> dict:
@@ -52,41 +83,79 @@ def core_weights(priorities) -> dict:
 
 CORE = core_weights(DEFAULT_PRIORITIES)
 
-# chart importance (first matching rule wins); 0 = never plan on its own
+# chart importance (first matching rule wins); 0 = never plan on its own.
+# Written to cover the wording of every station in the schedule file, not
+# just Northwood and DWD, so any station works as a 1st/2nd priority.
+REPEAT_RE = r"repetition|rebroadcast|retransmission|re-?transmit"
 IMPORTANCE = [
-    (r"gale", 28),
-    (r"surface (weather chart|analysis)|sfc analysis", 30),
-    (r"surface pressure analysis", 22),
-    (r"(prognosis|pressure).*(t\+24|h\+24|24hr)|h ?\+ ?24|t\+24", 24),
-    (r"t\+48|h\+48|h\+36", 16),
-    (r"t\+72|h\+60|h\+72", 12),
-    (r"t\+9|t\+12|h\+8|h\+10", 8),
-    (r"swell|wave|sea and swell", 12),
-    (r"wind", 10),
-    (r"precip|visibility", 10),
-    (r"anps", 8),
-    (r"tropical", 10),
-    (r"ice", 6),
-    (r"temperature|fronts", 5),
-    (r"schedule|request for comments|notice|test chart|general information", 0),
+    (r"not broadcast|schedule|request for comments|notice|test chart|general information|"
+     r"observation report|weather report|conditions report|manam|for shipping|sea forecast", 0),
+    (r"gale|storm warning|warning", 28),
+    (r"sigwx|significant weather", 10),
 ]
+# analyses of the surface / sea-level pressure field (only when no forecast hour)
+ANALYSIS_RE = (r"surface (weather chart|analysis|chart|map)|sfc analysis|msl analysis|"
+               r"prelim\w* surface|^surface pressure$|surface pressure \(|tasman.*msl analysis")
+FORECAST_RE = r"prog|forecast|f'cast|prediction"
+UPPER_RE = r"\d{3} ?(mb|hpa)|upper air"
 MIN_CORE_IMPORTANCE = 10
 
 LEAD_S = 75          # tune this long before the slot
 TAIL_S = 45          # extra time after the expected end
+DECODE_WAIT_MAX_S = 20 * 60  # longest wait for a decode before an item is logged as failed
 HOLD_MAX_S = 25 * 60  # a recording longer than any single chart is ended for the next planned one
 RETRY_BONUS = 2000   # repeat of a priority chart whose first try failed: beats any other chart
 GOOD_QUALITY = 0.6   # decode quality that counts as 'collected'
+EMPTY_SLOT_SNR = -6.0    # a failed slot with no signal at all (dB) ...
+EMPTY_SLOT_S = 45 * 60   # ... followed this soon by a good decode on the same frequency was
+                         # simply not transmitted: it says nothing about propagation
+EMPTY_SLOT_COUNT = 3     # a priority slot found empty this often (with the frequency working
+                         # either side) is taken as not broadcast and left out of the plan ...
+EMPTY_RECHECK_DAYS = 14  # ... but tried again this long after its last attempt
 HALF_LIFE_DAYS = 21  # learned results lose half their weight in this time
 PROBE_DAYS = 14      # re-check an alternative frequency not tried for this long
 DX_GOOD_QUALITY = 0.45
+DX_BACKOFF_MAX_DAYS = 7   # longest pause for a DX frequency/time block after failures in a row
+DX_MIN_PRIOR = 0.10       # below this the propagation model calls a DX path hopeless
+DX_GIVE_UP_S = 240        # silent DX probe: abandoned this long after its slot start ...
+DX_GIVE_UP_SNR = 0.0      # ... if the SNR has stayed below this (dB) and nothing was received
+
+
+def lead_hours(c: str) -> int | None:
+    """Forecast lead time in hours: 'T+24', 'H+48', '36HR', '72 HR', '3-DAY'."""
+    m = re.search(r"[th] ?\+ ?(\d{1,3})", c) or re.search(r"(\d{1,3}) ?-?(?:hr|hrs|h|hour)s?\b", c)
+    if m:
+        return int(m.group(1))
+    m = re.search(r"(\d) ?-?day", c)
+    return 24 * int(m.group(1)) if m else None
 
 
 def importance(contents: str) -> int:
-    c = contents.lower()
-    if "repetition" in c:
+    c = contents.lower().strip()
+    if re.search(REPEAT_RE, c):
         return 0                     # handled through the original chart
     for pat, v in IMPORTANCE:
+        if re.search(pat, c):
+            return v
+    lead = lead_hours(c)
+    upper = re.search(UPPER_RE, c) is not None
+    if lead is None and not re.search(FORECAST_RE, c):
+        if "surface pressure analysis" in c:
+            return 22
+        if re.search(ANALYSIS_RE, c):
+            return 30
+    if upper:
+        # upper-air charts: useful, but behind the surface charts
+        return 12 if lead is None and "analysis" in c else 10 if (lead or 0) <= 48 else 6
+    if lead is not None:
+        # any forecast product: the nearer the lead time the better
+        return 24 if lead <= 24 else 20 if lead <= 36 else 16 if lead <= 48 else 12 if lead <= 72 else 8
+    if re.search(FORECAST_RE, c) and re.search(r"surface|sfc|msl|pressure", c):
+        return 16
+    for pat, v in ((r"swell|wave|sea state|sea and swell", 12), (r"wind", 10),
+                   (r"precip|visibility", 10), (r"tropical", 10), (r"anps", 8),
+                   (r"ice", 10), (r"satellite|goes|msat|infrared", 8),
+                   (r"temperature|fronts|sst", 5)):
         if re.search(pat, c):
             return v
     return 6
@@ -128,21 +197,44 @@ def _gc(lat1, lon1, lat2, lon2):
     return 6371.0 * d, math.degrees(pm), math.degrees(lm)
 
 
+def _gc_point(lat1, lon1, lat2, lon2, frac):
+    """Point a fraction `frac` of the way along the great circle."""
+    p1, l1, p2, l2 = map(math.radians, (lat1, lon1, lat2, lon2))
+    d = 2 * math.asin(math.sqrt(math.sin((p2 - p1) / 2) ** 2
+                                + math.cos(p1) * math.cos(p2) * math.sin((l2 - l1) / 2) ** 2))
+    if d < 1e-9:
+        return lat1, lon1
+    A, B = math.sin((1 - frac) * d) / math.sin(d), math.sin(frac * d) / math.sin(d)
+    x = A * math.cos(p1) * math.cos(l1) + B * math.cos(p2) * math.cos(l2)
+    y = A * math.cos(p1) * math.sin(l1) + B * math.cos(p2) * math.sin(l2)
+    z = A * math.sin(p1) + B * math.sin(p2)
+    return math.degrees(math.atan2(z, math.hypot(x, y))), math.degrees(math.atan2(y, x))
+
+
 def prior(qth, short: str, khz: float, when: datetime) -> float:
     """Rough probability (0..1) that a frequency is usable on this path now.
 
-    foF2 follows solar elevation at the path mid-point (about 3.5 MHz at night
-    to 9 MHz at high sun); MUF = foF2 x obliquity factor (single hop, 300 km
-    layer, at most 3.4); daytime D-layer absorption raises the LUF on long
-    paths.  Crude by design - logged results take over once available.
+    foF2 follows solar elevation (about 4 MHz at night to 11 MHz at high
+    sun); MUF = foF2 x obliquity factor (single hop, 300 km layer, at most
+    3.4); daytime D-layer absorption raises the LUF on long paths. Paths up
+    to 2000 km are judged at the mid-point. Longer ones at control points
+    1000 km in from each end as well: the MUF is set by the darkest of them
+    and the LUF by the sunniest, so a 2 MHz path across the Atlantic is not
+    rated open at noon just because its mid-point is dark. Crude by design -
+    logged results take over once available.
     """
     site = SITES.get(short)
     if site is None:
         return 0.15
     d, mlat, mlon = _gc(qth[0], qth[1], site[0], site[1])
-    el = _solar_elev(mlat, mlon, when)
-    s = max(0.0, math.sin(math.radians(el)))
-    fof2 = 4.0 + 7.0 * math.sqrt(s)
+    if d <= 2000.0:
+        pts = [(mlat, mlon)]
+    else:
+        f = 1000.0 / d
+        pts = [_gc_point(qth[0], qth[1], site[0], site[1], q) for q in (f, 0.5, 1 - f)]
+    sun = [max(0.0, math.sin(math.radians(_solar_elev(la, lo, when)))) for la, lo in pts]
+    fof2 = 4.0 + 7.0 * math.sqrt(min(sun))      # the weakest control point limits the MUF
+    s = max(sun)                                 # the sunniest one sets the absorption
     hop = min(d, 3500.0) / 2.0
     muf = fof2 * min(3.4, math.sqrt(1 + (hop / 300.0) ** 2))
     luf = 1.5 + 7.0 * s * min(1.0, d / 3000.0)
@@ -172,6 +264,9 @@ class PropLog:
         self.lock = threading.Lock()
         self.stats: dict[tuple, dict] = {}
         self.collected: dict[str, float] = {}     # chart key -> best quality
+        self._dead: dict[tuple, tuple] = {}         # (station, kHz) -> last silent failure
+        self.slot_gaps: dict[tuple, int] = {}       # (station, slot) -> times found empty
+        self.slot_last: dict[tuple, float] = {}     # (station, slot) -> last attempt
         if self.path.exists():
             for line in self.path.read_text(encoding="utf-8", errors="replace").splitlines():
                 try:
@@ -184,15 +279,37 @@ class PropLog:
         k = (r["short"], float(r["khz"]), hour_bucket(when))
         st = self.stats.setdefault(k, {"hist": [], "fails_in_row": 0, "last": 0.0, "last_ok": 0.0})
         q = float(r.get("quality") or 0.0)
-        core = r.get("kind") == "core" if "kind" in r else r["short"] in CORE
+        kind = r.get("kind")
+        # a priority-station chart received off-plan is judged like a planned one
+        core = kind == "core" or (kind == "manual" and r["short"] in CORE) if kind else r["short"] in CORE
         good = q >= (GOOD_QUALITY if core else DX_GOOD_QUALITY)
-        st["hist"] = (st["hist"] + [(when.timestamp(), good, q, r.get("snr_db"))])[-60:]
-        st["last"] = when.timestamp()
+        ts, snr = when.timestamp(), r.get("snr_db")
+        st["hist"] = (st["hist"] + [(ts, good, q, snr)])[-60:]
+        st["last"] = ts
+        fk = (r["short"], float(r["khz"]))
+        sk = (r["short"], r.get("slot"))
+        if sk[1]:
+            self.slot_last[sk] = max(ts, self.slot_last.get(sk, 0.0))
+            if good:
+                self.slot_gaps.pop(sk, None)          # it is broadcast after all
         if good:
             st["fails_in_row"] = 0
-            st["last_ok"] = when.timestamp()
+            st["last_ok"] = ts
+            # a silent failure shortly before on this same frequency was a slot
+            # the station didn't send (schedule gap), not a propagation failure
+            d = self._dead.pop(fk, None)
+            if d and 0 < ts - d[0] <= EMPTY_SLOT_S:
+                if d[2]:
+                    self.slot_gaps[(r["short"], d[2])] = self.slot_gaps.get((r["short"], d[2]), 0) + 1
+                dst = self.stats.get(d[1])
+                if dst:
+                    dst["hist"] = [h for h in dst["hist"] if h[0] != d[0]]
+                    if dst is not st and dst["fails_in_row"] > 0:
+                        dst["fails_in_row"] -= 1
         else:
             st["fails_in_row"] += 1
+            if snr is not None and snr < EMPTY_SLOT_SNR and r.get("kind") != "dx":
+                self._dead[fk] = (ts, k, r.get("slot"))
         if r.get("key") and q > self.collected.get(r["key"], -1):
             self.collected[r["key"]] = q
 
@@ -220,6 +337,16 @@ class PropLog:
                 f.write(json.dumps(r) + "\n")
             self._apply(r)
 
+    def slot_empty(self, short: str, slot: str, now: datetime) -> bool:
+        """This slot has repeatedly been found empty (schedule gap): skip it,
+        except for a recheck every EMPTY_RECHECK_DAYS."""
+        if self.slot_gaps.get((short, slot), 0) < EMPTY_SLOT_COUNT:
+            return False
+        return now.timestamp() - self.slot_last.get((short, slot), 0.0) < EMPTY_RECHECK_DAYS * 86400
+
+    def empty_slots(self, now: datetime) -> list[str]:
+        return sorted(f"{s} {sl}Z" for (s, sl) in self.slot_gaps if self.slot_empty(s, sl, now))
+
     def get(self, short, khz, when):
         return self.stats.get((short, float(khz), hour_bucket(when)))
 
@@ -234,7 +361,7 @@ class PropLog:
         st = self.get(short, khz, when)
         if not st or st["fails_in_row"] == 0:
             return 0.0
-        days = min(28, 2 ** (st["fails_in_row"] - 1))
+        days = min(DX_BACKOFF_MAX_DAYS, 2 ** (st["fails_in_row"] - 1))
         return st["last"] + days * 86400
 
     def score(self, qth, short, khz, when, sample=False, rng=None) -> float:
@@ -283,7 +410,7 @@ class PropLog:
                         "snr_db": w["snr_med"],
                         "last_tried": datetime.fromtimestamp(st["last"], timezone.utc).strftime("%Y-%m-%d"),
                         "retry_after": (datetime.fromtimestamp(
-                            st["last"] + min(28, 2 ** (st["fails_in_row"] - 1)) * 86400, timezone.utc)
+                            st["last"] + min(DX_BACKOFF_MAX_DAYS, 2 ** (st["fails_in_row"] - 1)) * 86400, timezone.utc)
                             .strftime("%Y-%m-%d %H:%MZ") if st["fails_in_row"] else None)})
         return out
 
@@ -385,7 +512,12 @@ class Planner:
             if stale:
                 k = rng.choice(stale)
                 return k, self.log.value(self.qth, short, k, when)
-        scored = [(self.log.value(self.qth, short, k, when, sample=explore, rng=rng), k) for k in khzs]
+        # never pick a frequency the propagation model rules out (above the MUF,
+        # below the LUF) and that has no results of its own, just because the
+        # tried ones have been failing - poor conditions on all of them is
+        # more likely than an untried 11 MHz working at night
+        cand = [k for k in khzs if prior(self.qth, short, k, when) >= 0.1 or self.log.get(short, k, when)] or khzs
+        scored = [(self.log.value(self.qth, short, k, when, sample=explore, rng=rng), k) for k in cand]
         scored.sort(reverse=True)
         return scored[0][1], scored[0][0]
 
@@ -402,13 +534,19 @@ class Planner:
             ref = {}           # DWD 'Repetition chart 1050 UTC' -> the 1050 chart
             for start, end, sl, khzs in self._occurrences(st, now, horizon_h):
                 contents, valid = sl.contents, sl.valid
-                m = re.search(r"repetition (?:of |chart )?(\d{4})", contents.lower())
-                if m and m.group(1) in ref:
-                    contents, valid = ref[m.group(1)]
+                low = contents.lower()
+                if re.search(REPEAT_RE, low):
+                    # 'Repetition chart 1050 UTC', '(REBROADCAST OF 0325/1525)':
+                    # a back-up of an earlier chart today
+                    orig = next((t for t in re.findall(r"\b(\d{4})\b", low) if t in ref), None)
+                    if orig:
+                        contents, valid = ref[orig]
                 ref[sl.hhmm] = (contents, valid)
                 imp = importance(contents)
                 if imp < MIN_CORE_IMPORTANCE or start < now - timedelta(seconds=30):
                     continue
+                if self.log.slot_empty(st.short, sl.hhmm, start):
+                    continue              # found empty again and again: not broadcast
                 key = chart_key(st.short, contents, valid)
                 run_day = (start - timedelta(hours=(start.hour - int(valid)) % 24 if valid.isdigit() else 0)).date()
                 key = f"{key}|{run_day}"
@@ -435,6 +573,11 @@ class Planner:
                 if start < now + timedelta(seconds=LEAD_S):
                     continue
                 elig = [k for k in khzs if self.log.backoff_until(st.short, k, start) <= start.timestamp()]
+                # skip what the propagation model calls hopeless (a 2 MHz path
+                # across the Atlantic at noon, 18 MHz at night) unless that
+                # frequency has actually worked in this time block before
+                elig = [k for k in elig if prior(self.qth, st.short, k, start) >= DX_MIN_PRIOR
+                        or ((h := self.log.get(st.short, k, start)) and h["last_ok"] > 0)]
                 if not elig:
                     continue
                 khz, p = self._best_freq(st.short, elig, start, explore=True)   # Thompson sample
@@ -492,6 +635,7 @@ class AutoScheduler:
         self.proplog = PropLog(Path(out_dir) / "proplog.jsonl")
         self.settings_path = Path(out_dir) / "settings.json"
         self.priorities = self._load_priorities(sched)
+        self.qth = tuple(qth)
         self.planner = Planner(sched, self.proplog, qth, dx, priorities=self.priorities)
         self.enabled = enabled
         self.paused_until = 0.0
@@ -499,6 +643,7 @@ class AutoScheduler:
         self.current: Item | None = None
         self.receiving = False
         self.rec_elapsed = 0.0
+        self.decoder_busy = None       # set by the main program: True while faxes wait to be decoded
         self.force_end = None          # set by the main program: ends the recording in progress
         self._forced_t = 0.0
         self.last_snr = None
@@ -523,6 +668,13 @@ class AutoScheduler:
             pass
         return list(DEFAULT_PRIORITIES)
 
+    def set_qth(self, qth):
+        """Receiver location changed on the page: the propagation estimates
+        (and so the frequency choices and DX probes) follow at once."""
+        self.qth = self.planner.qth = tuple(qth)
+        self.logf(f"auto: location set to {qth[0]:.2f}, {qth[1]:.2f}")
+        self.replan()
+
     def set_priorities(self, first, second):
         """1st / 2nd priority stations (short names); saved for the next start."""
         if second == first:
@@ -545,6 +697,12 @@ class AutoScheduler:
 
     def replan(self):
         now = self.clock()
+        empty = set(self.proplog.empty_slots(now))
+        new_empty = empty - getattr(self, "_empty_seen", set())
+        if new_empty:
+            self.logf("auto: slots found empty repeatedly (not broadcast?) - left out of the plan, "
+                      f"rechecked every {EMPTY_RECHECK_DAYS} days: {', '.join(sorted(new_empty))}")
+        self._empty_seen = empty
         with self._lock:
             busy = [i for i in self.items if i.state == "tuned"
                     and i.end + timedelta(seconds=TAIL_S) > now]
@@ -563,25 +721,33 @@ class AutoScheduler:
     def on_status(self, s: dict):
         self.receiving = s.get("state") == "receiving"
         self.rec_elapsed = float(s.get("elapsed") or 0) if self.receiving else 0.0
+        # when the recording in progress started (PC clock)
+        self.rec_start_ts = time.time() - self.rec_elapsed if self.receiving else None
         if s.get("snr_db") is not None:
             self.last_snr = float(s["snr_db"])
 
     def on_fax(self, product: dict | None, meta: dict, utc: str):
         """A fax was decoded: attach the result to the matching plan item."""
         q = float(meta.get("quality", 0))
+        # SNR measured while the chart was coming in; the current reading is
+        # taken after it ended (often just noise) and would be misleading
+        snr = meta.get("snr_db")
+        if snr is None:
+            snr = self.last_snr
         with self._lock:
             it = None
             if product and product.get("slot"):
                 it = next((i for i in self.items if i.short == product.get("short")
                            and i.slot == product.get("slot") and i.state in ("tuned", "closing")), None)
         if it is not None:
-            it.result = {"quality": q, "lines": meta.get("lines")}
+            it.result = {"quality": q, "lines": meta.get("lines"), "snr_db": snr}
         elif product and product.get("khz"):
-            # received outside the plan (manual tuning) - still useful to learn from
+            # not a planned item (e.g. the next chart of the same station while
+            # still tuned there) - still useful to learn from
             when = datetime.strptime(utc, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
             self.proplog.add({"utc": utc, "short": product["short"], "khz": product["khz"],
-                              "slot": product.get("slot"), "snr_db": self.last_snr, "quality": q,
-                              "key": None, "kind": "manual", "hour": when.hour})
+                              "slot": product.get("slot"), "snr_db": None if snr is None else round(snr, 1),
+                              "quality": q, "key": None, "kind": "manual", "hour": when.hour})
         if q >= GOOD_QUALITY:
             self.replan()                            # drop repeats of what we now have
 
@@ -610,13 +776,31 @@ class AutoScheduler:
             if it.state == "tuned":
                 if it.start <= now <= it.end and self.last_snr is not None:
                     it.snr.append(self.last_snr)
+                if self.receiving and it.start - timedelta(seconds=LEAD_S) <= now:
+                    it.heard = True               # something was recorded while on this item
+                if self._dx_dead(it, now):
+                    continue
+                # an earlier recording was still running when this chart began:
+                # the receiver was busy, which says nothing about propagation
+                rs = getattr(self, "rec_start_ts", None)
+                if self.receiving and rs is not None and \
+                        it.start + timedelta(seconds=60) <= now <= it.end and \
+                        rs < it.start.timestamp() - 90:
+                    it.blocked = True
                 if now > it.end + timedelta(seconds=TAIL_S) and not self.receiving:
                     self._close(it)
-            if it.state == "closing" and (it.result is not None or time.time() - it.close_t > 150):
+            waited = time.time() - it.close_t if it.state == "closing" else 0
+            busy = self.decoder_busy() if self.decoder_busy else False
+            # wait for the decode: 150 s, longer while the decoder is still busy
+            if it.state == "closing" and (it.result is not None or (waited > 150 and not busy)
+                                           or waited > DECODE_WAIT_MAX_S):
                 it.state = "done"
                 if it.result is None and getattr(it, "abandoned", False):
                     # left before the chart could finish: says nothing about propagation
                     self.logf(f"auto: {it.short} {it.khz} kHz {it.slot}Z left early - not counted")
+                elif it.result is None and getattr(it, "blocked", False):
+                    self.logf(f"auto: {it.short} {it.khz} kHz {it.slot}Z missed - receiver busy with "
+                              f"an earlier recording - not counted")
                 else:
                     self._log_item(it, it.result["quality"] if it.result else 0.0)
         if not self.enabled or time.time() < self.paused_until or self.cat is None or not self.cat.enabled:
@@ -660,6 +844,25 @@ class AutoScheduler:
         self.logf(f"auto: {due.start:%H:%M}Z {due.short} {due.khz} kHz (dial {due.dial}) - {due.contents}"
                   f" [{due.kind}]")
 
+    def _dx_dead(self, it: Item, now: datetime) -> bool:
+        """A DX probe that has heard nothing worth recording: stop it early,
+        log the failure and free the receiver for the next planned item or
+        for another probe fitted into the gap."""
+        if it.kind != "dx" or getattr(it, "heard", False) or self.receiving:
+            return False
+        if now < it.start + timedelta(seconds=DX_GIVE_UP_S) or len(it.snr) < 20:
+            return False
+        snr = sorted(it.snr)
+        if snr[len(snr) // 2] >= DX_GIVE_UP_SNR or snr[int(len(snr) * 0.9)] >= DX_GIVE_UP_SNR + 3:
+            return False
+        med = round(snr[len(snr) // 2], 1)
+        self.logf(f"auto: {it.short} {it.khz} kHz {it.slot}Z - nothing heard after "
+                  f"{DX_GIVE_UP_S // 60} min (SNR {med:+.0f} dB), moving on")
+        it.result = {"quality": 0.0, "snr_db": med}
+        self._close(it)
+        threading.Thread(target=self.replan, daemon=True).start()   # use the freed time
+        return True
+
     def _close(self, it: Item):
         it.state = "closing"
         it.close_t = time.time()
@@ -671,6 +874,8 @@ class AutoScheduler:
             return
         it._logged = True
         snr = sorted(it.snr)[len(it.snr) // 2] if it.snr else None
+        if it.result and it.result.get("snr_db") is not None:
+            snr = round(float(it.result["snr_db"]), 1)   # measured during the chart itself
         self.proplog.add({"utc": it.start.strftime("%Y-%m-%dT%H:%M:%SZ"), "short": it.short, "khz": it.khz,
                           "slot": it.slot, "snr_db": snr, "quality": round(quality, 3), "key": it.key,
                           "kind": it.kind, "hour": it.start.hour})
@@ -682,11 +887,12 @@ class AutoScheduler:
         """The plan item the scheduler had tuned for at this time (or None)."""
         with self._lock:
             items = list(self.items)
-        for it in items:
-            if it.state in ("tuned", "closing", "done") and \
-                    it.start - timedelta(seconds=180) <= when <= it.end + timedelta(seconds=60):
-                return it
-        return None
+        hits = [it for it in items if it.state in ("tuned", "closing", "done")
+                and it.start - timedelta(seconds=180) <= when <= it.end + timedelta(seconds=60)]
+        # back-to-back charts overlap these windows: the one whose start is
+        # nearest the start of reception is the chart being received (a new
+        # start tone a minute after the last chart ended is the next chart)
+        return min(hits, key=lambda it: abs((it.start - when).total_seconds()), default=None)
 
     # -------- for the web page
     def status(self) -> dict:

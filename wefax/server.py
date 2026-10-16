@@ -166,6 +166,18 @@ def make_handler(hub: Hub):
                     return self._send(400, b'{"error":"unknown station"}', "application/json")
                 hub.auto.set_priorities(first, second)
                 return self._send(200, json.dumps(hub.auto.status()).encode(), "application/json")
+            if path == "/api/qth":
+                from .autosched import parse_qth
+                text = str(body.get("qth") or "").strip()
+                try:
+                    qth = parse_qth(text)
+                except ValueError as e:
+                    return self._send(400, json.dumps({"error": str(e)}).encode(), "application/json")
+                hub.save_setting("qth", text)
+                if hub.auto is not None:
+                    hub.auto.set_qth(qth)
+                return self._send(200, json.dumps({"ok": True, "text": text, "lat": qth[0], "lon": qth[1]}).encode(),
+                                  "application/json")
             if path == "/api/keep":
                 from .housekeep import KEEP_CHOICES
                 try:
@@ -231,6 +243,13 @@ def make_handler(hub: Hub):
                 self._send(200, json.dumps({"ports": ports, "current": cur,
                                             "connected": bool(hub.cat and hub.cat.connected),
                                             "available": hub.cat is not None}).encode(), "application/json")
+            elif path == "/api/qth":
+                from .autosched import DEFAULT_QTH
+                q = hub.auto.qth if hub.auto else DEFAULT_QTH
+                text = hub.load_settings().get("qth")
+                self._send(200, json.dumps({"text": text, "lat": q[0], "lon": q[1],
+                                            "default": not text and tuple(q) == DEFAULT_QTH}).encode(),
+                           "application/json")
             elif path == "/api/keep":
                 from .housekeep import keep_days, KEEP_CHOICES
                 self._send(200, json.dumps({"days": keep_days(hub.load_settings()),

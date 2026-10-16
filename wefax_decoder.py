@@ -316,7 +316,7 @@ class Processor:
                 and str(meta.get("end_reason", "")).startswith(CLEAN_ENDS):
             lengths.learn(product["short"], product["slot"], datetime.fromtimestamp(end_ts, timezone.utc))
         if getattr(self, "auto", None) is not None:
-            self.auto.on_fax(product, res["meta"], meta.get("utc", ""))
+            self.auto.on_fax(product, dict(res["meta"], snr_db=meta.get("snr_db")), meta.get("utc", ""))
 
 
 def station_info(sched, cat, station, s, auto=None) -> dict:
@@ -416,8 +416,10 @@ def main():
     ap.add_argument("--cat-baud", type=int, default=57600)
     ap.add_argument("--station", help="station when no CAT, e.g. DWD or Northwood")
     ap.add_argument("--auto", action="store_true", help="start with the auto-scheduler on (needs --cat)")
-    ap.add_argument("--no-dx", action="store_true", help="auto-scheduler: Northwood/DWD only, no DX gap filling")
-    ap.add_argument("--qth", default="50.37,-4.14", help="your lat,lon for the propagation model")
+    ap.add_argument("--no-dx", action="store_true", help="auto-scheduler: 1st/2nd priority stations only, no DX gap filling")
+    ap.add_argument("--qth", default=None,
+                    help="your location for the propagation model: 'lat,lon' or a Maidenhead locator "
+                         "(default Plymouth, UK; a location set on the page takes precedence)")
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -456,8 +458,20 @@ def main():
         if saved != "unset" and args.cat and saved != args.cat:
             log.info("CAT: using %s chosen on the page (start option said %s)", saved or "off", args.cat)
         cat = CatReader(port, args.cat_baud, args.cat_rx, log=log.info)
-    from wefax.autosched import AutoScheduler
-    qth = tuple(float(v) for v in args.qth.split(","))
+    from wefax.autosched import AutoScheduler, parse_qth, DEFAULT_QTH
+    # the location set on the page (faxes/settings.json) wins over --qth
+    saved_qth = hub.load_settings().get("qth")
+    qth = DEFAULT_QTH
+    for src, val in (("--qth", args.qth), ("page", saved_qth)):
+        if val:
+            try:
+                qth = parse_qth(val)
+            except ValueError as e:
+                log.info("location from %s ignored: %s (%s)", src, val, e)
+    if saved_qth and args.qth and saved_qth != args.qth:
+        log.info("location: using %s set on the page (start option said %s)", saved_qth, args.qth)
+    log.info("location: %.2f, %.2f%s", qth[0], qth[1], "" if (args.qth or saved_qth) else
+             " (default - set yours in the QTH box on the page)")
     auto = AutoScheduler(sched, cat, out, qth, enabled=bool(args.auto and cat and cat.enabled),
                          dx=not args.no_dx, log=log.info)
     if args.auto and not (cat and cat.enabled):
@@ -506,6 +520,7 @@ def main():
                                           on_preview=hub.set_live),
                       device=device, channel=args.channel, samplerate=args.samplerate, log=log.info)
     hub.capture = cap
+    auto.decoder_busy = lambda: proc.busy > 0
     auto.force_end = lambda reason: cap.detector and cap.detector.request_finish(reason)
 
     def set_deadline(det):
@@ -519,6 +534,12 @@ def main():
         if dl is None:
             return rec_id
         when, how, end = dl
+        if when.timestamp() < time.time() + 60:
+            # already (nearly) over: the chart was misidentified, or this is a
+            # late repeat - never cut a recording that has only just begun
+            log.info("receiving %s %sZ: its expected end has passed - no length limit for this one",
+                     p["short"], p["slot"])
+            return rec_id
         if det.state == "receiving" and det.rec_meta.get("t0_samples") == rec_id:
             det.deadline = (when.timestamp(), end.timestamp() if end else None,
                             f"{p['short']} {p['slot']}Z, {how}")

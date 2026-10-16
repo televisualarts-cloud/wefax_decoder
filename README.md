@@ -75,7 +75,13 @@ the command line):
 - `--device` is the audio input used until you choose one on the page. The
   default is `Line 8 (Virtual Audio Cable) MME`; if that isn't present, the
   system default input is used. `--list-devices` lists the inputs.
-- `--qth lat,lon` is your location for the propagation model. The default is Plymouth, UK.
+- **QTH** (in the bar at the top of the page) is your location for the propagation
+  model: `lat, lon` in decimal degrees (south and west negative) or a Maidenhead
+  locator such as `IO70ri`. Press Enter to apply; the plan is rebuilt straight away and
+  the setting is saved. Until it is set the box has a red border and Plymouth, UK is
+  used. `--qth` at start-up does the same; a location set on the page takes precedence.
+  Frequency choice and DX probing depend on it. Any station in the schedule file can be
+  chosen as 1st or 2nd priority on the page.
 
 To decode a recording instead of live audio, run
 `python wefax_decoder.py --wav recording.wav`.
@@ -171,11 +177,25 @@ The auto-scheduler needs CAT. Press **AUTO** on the page, or start with
   against the frequency.
 - **Frequency choice:** each slot gets the frequency that has worked best at
   that time of day. With no history yet, it uses a simple ionospheric
-  estimate based on path length and sun height at the path mid-point.
+  estimate based on path length and sun height: at the path mid-point for
+  paths up to 2000 km, and also 1000 km in from each end on longer paths (the
+  darkest point limits the MUF, the sunniest sets the absorption).
 - **Learning:** DX combinations of station, frequency and time of day that
-  keep failing are retried after 1, 2, 4, 8 and 16 days, then every 28 days,
-  so improving propagation is noticed. Old results fade out gradually, so
-  seasonal changes are followed.
+  keep failing are retried after 1, 2 and 4 days, then every 7 days, so
+  improving propagation is noticed. Old results fade out gradually, so
+  seasonal changes are followed. DX probes the propagation estimate calls
+  hopeless are skipped unless that frequency has worked at that time before.
+  The SNR logged for every attempt is measured while the chart is on air. A
+  chart missed because an earlier recording was still running isn't counted
+  against the frequency.
+- **Empty slots:** a priority-station slot that is silent three times while the same
+  frequency decodes the charts either side is taken as not broadcast and left out of
+  the plan, then tried again every 14 days (published schedules go out of date: in
+  October 2026 Northwood no longer sent its ANPS T+24 charts and its 0936 slot carried
+  a WAFC SIGWX chart; the built-in Northwood list is corrected for these).
+- **Silent DX probes:** if nothing is received 4 minutes into a DX slot and the
+  SNR has stayed below 0 dB, the probe is logged as failed and the time is
+  given to the next planned chart or another probe.
 - **Manual tuning:** using Tune or a chart chip pauses the scheduler for
   20 minutes.
 - **No DX:** use `--no-dx` to stop the gap filling.

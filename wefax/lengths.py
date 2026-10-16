@@ -22,7 +22,7 @@ from pathlib import Path
 
 KEEP = 8                 # most recent measurements kept per chart
 CLEAN_ENDS = ("stop tone", "end-of-frame black")
-LEARNT_MARGIN_S = 20.0   # after the learnt image end: covers stop tone + black
+LEARNT_MARGIN_S = 30.0   # after the learnt image end: stop tone (5 s) + black (10 s) + detection
 SCHEDULE_LEAD_S = 15.0   # before the next slot's start, when nothing is learnt
 PREROLL_S = 12.0         # Detector default; only used to read old fax records
 STOP_TAIL_S = 12.5       # stop-tone recordings run on ~10 s + detection lag

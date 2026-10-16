@@ -29,6 +29,10 @@
   .prio select { font: 600 14px var(--mono); color: #ffffff; background: #171c23; border: 1px solid var(--line);
     border-radius: 4px; padding: 3px 6px; max-width: 240px; }
   .prio select:disabled { opacity: .45; }
+  .prio input { font: 600 14px var(--mono); color: #ffffff; background: #171c23; border: 1px solid var(--line);
+    border-radius: 4px; padding: 3px 6px; width: 150px; }
+  .prio input.ok { border-color: var(--rx); }
+  .prio input.bad { border-color: var(--bad); }
   /* fixed-width slots so changing readings don't shift the rest of the line */
   #lvltxt { display: inline-block; width: 9ch; text-align: right; white-space: nowrap; }
   #sig { width: 20ch; white-space: nowrap; overflow: hidden; }
@@ -152,6 +156,8 @@
   <label class="prio">CAT port <select id="selCat" title="SDR Console CAT (TS-2000) COM port"></select></label>
   <label class="prio">1st priority <select id="selP1"></select></label>
   <label class="prio">2nd priority <select id="selP2"></select></label>
+  <label class="prio">QTH <input id="inQth" spellcheck="false" placeholder="lat, lon or IO70ri"
+    title="Your location for the propagation model: latitude, longitude in decimal degrees (south and west negative), or a Maidenhead locator. Press Enter to apply."></label>
   <label class="prio">Keep <select id="selKeep" title="Faxes older than this are deleted in a quiet moment after midnight (the station copies are always kept)"></select></label>
 </div>
 <div class="page">
@@ -174,7 +180,7 @@
     <div style="flex-basis:100%;height:0"></div>
     <span title="Broadcast times of the station selected above - click one to tune it">THIS STATION</span><div class="chips" id="upcoming"></div>
     <div style="flex-basis:100%;height:0"></div>
-    <button id="bAuto" title="Auto-schedule: tune SDR Console to the most important Northwood/DWD charts, DX in the gaps">AUTO</button>
+    <button id="bAuto" title="Auto-schedule: tune SDR Console to the most important charts of your 1st and 2nd priority stations, DX in the gaps">AUTO</button>
     <span id="autoMsg"></span>
     <span title="What the auto-scheduler will tune, in order">AUTO PLAN</span><span id="nextBig" hidden></span><div class="chips" id="plan"></div>
   </div>
@@ -644,6 +650,27 @@ $('selKeep').onchange = async () => {
   loadKeep();
 };
 loadKeep();
+// ---------------- receiver location ----------------
+async function loadQth() {
+  try {
+    const j = await (await fetch('/api/qth')).json();
+    const el = $('inQth');
+    el.value = j.text || `${j.lat}, ${j.lon}`;
+    el.className = j.default ? 'bad' : 'ok';
+    el.title = el.title.split(' | ')[0] + ` | now ${j.lat.toFixed(2)}, ${j.lon.toFixed(2)}` +
+               (j.default ? ' (default: Plymouth, UK - set yours)' : '');
+  } catch (e) {}
+}
+async function saveQth() {
+  const el = $('inQth');
+  const r = await fetch('/api/qth', {method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({qth: el.value})});
+  if (r.ok) { loadQth(); loadPlan(); }
+  else { el.className = 'bad'; try { el.title = el.title.split(' | ')[0] + ' | ' + (await r.json()).error; } catch (e) {} }
+}
+$('inQth').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); saveQth(); $('inQth').blur(); } };
+$('inQth').onchange = saveQth;
+loadQth();
 // ---------------- auto-scheduler ----------------
 let planCache = null;
 function tickNext() {                    // large countdown to the next planned chart
