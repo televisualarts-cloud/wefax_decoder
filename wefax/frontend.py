@@ -9,6 +9,7 @@ at the whole picture at once.
 """
 from __future__ import annotations
 
+import base64
 import collections
 import threading
 import time
@@ -25,8 +26,11 @@ class Detector:
     PRESENT_RATIO = 1.4
 
     def __init__(self, fs: float, on_recording, on_status=None, max_minutes: float = 40.0,
-                 preroll_s: float = 12.0, lost_s: float = 45.0, log=print, on_preview=None):
+                 preroll_s: float = 12.0, lost_s: float = 45.0, log=print, on_preview=None,
+                 on_spectrum=None):
         self.fs = fs
+        self.on_spectrum = on_spectrum      # live spectrum for the page (see _spectrum)
+        self.spec_afc = None
         self.nb = int(round(self.BLOCK_S * fs))
         self.on_recording = on_recording
         self.on_status = on_status or (lambda s: None)
@@ -118,6 +122,12 @@ class Detector:
         self.last_label = label
         rms = float(np.sqrt(np.mean(a * a))) + 1e-12
         self.level_db = 20 * np.log10(rms)
+        if self.on_spectrum is not None:
+            try:
+                self._spectrum(a)
+            except Exception as e:          # the display must never stop reception
+                if self.block_count % 400 == 1:
+                    self.log(f"spectrum error: {e}")
         self.fhist.append(f)
         self.fbuf.append(f)
 
@@ -159,6 +169,11 @@ class Detector:
             self.stop_hist.append(label == "stop")
             self.stop_run = sum(self.stop_hist)
             elapsed = self.rec_n / self.fs
+            # a recording started from the picture check began mid-chart: any
+            # start tone or phasing after that is the next chart, split at once
+            mid = self.rec_meta.get("trigger") == "picture"
+            split_tone_s = self.PICTURE_SPLIT_S if mid else 90
+            split_phase_s = self.PICTURE_SPLIT_S if mid else self.SPLIT_MIN_S
             if self.stop_run >= 6 and elapsed > 60:
                 # keep ~10 s after the stop tone for the end-of-frame black
                 if self._tail is None:
@@ -169,7 +184,7 @@ class Detector:
                 if self._tail <= 0:
                     self._tail = None
                     self._finish("stop tone")
-            elif self.start_run >= 8 and elapsed > 90:
+            elif self.start_run >= 8 and elapsed > split_tone_s:
                 seed = self.rec_tail_for_restart
                 ioc = 576 if self.start_kind == "start576" else 288
                 self.rec = self.rec[:-len(seed)]
@@ -182,7 +197,7 @@ class Detector:
                 self._end_by_deadline()
             elif elapsed > self.SPLIT_MIN_S and self._end_of_frame(f):
                 pass                          # finished inside _end_of_frame
-            elif elapsed > self.SPLIT_MIN_S and self.block_count % 4 == 0 and self._phasing_now():
+            elif elapsed > split_phase_s and self.block_count % 4 == 0 and self._phasing_now():
                 # the next chart's phasing has started, but its start tone (and
                 # this chart's stop tone) were missed: close this chart and
                 # start a new recording from shortly before the phasing
@@ -201,6 +216,27 @@ class Detector:
 
         if self.block_count % 4 == 0:
             self.on_status(self.status())
+
+    SPEC_F0, SPEC_F1, SPEC_BIN = 800, 3000, 10   # Hz: the receiver audio shown on the page
+
+    def _spectrum(self, a: np.ndarray):
+        """Power spectrum of this 0.25 s block, 800-3000 Hz in 10 Hz bins, sent
+        to the page as bytes (dB x2 + 260). Every 2 s also the tuning offset,
+        measured as the decoder does (psd_comb) over the last 12-20 s."""
+        n = len(a)
+        X = np.abs(np.fft.rfft(a * np.hanning(n))) ** 2 / n
+        f = np.fft.rfftfreq(n, 1.0 / self.fs)
+        edges = np.arange(self.SPEC_F0, self.SPEC_F1 + self.SPEC_BIN, self.SPEC_BIN)
+        idx = np.searchsorted(f, edges)
+        p = np.array([X[i0:max(i1, i0 + 1)].mean() for i0, i1 in zip(idx[:-1], idx[1:])])
+        u8 = np.clip((10 * np.log10(p + 1e-14) + 130) * 2, 0, 255).astype(np.uint8)
+        if self.block_count % 8 == 0:
+            blocks = self.rec[-80:] if self.state == "receiving" else list(self.pre)
+            if len(blocks) >= 16:
+                off, score = dsp.psd_comb(np.concatenate(blocks), self.fs)
+                self.spec_afc = round(float(off), 1) if score > 6 else None
+        self.on_spectrum({"f0": self.SPEC_F0, "bin": self.SPEC_BIN,
+                          "db": base64.b64encode(u8.tobytes()).decode("ascii"), "afc": self.spec_afc})
 
     # ------------------------------------------------------------------
     def status(self) -> dict:
@@ -392,6 +428,18 @@ class Detector:
         k = int(8 / self.BLOCK_S)
         return self.rec[-k:]
 
+    PICTURE_SPLIT_S = 15.0    # earliest split in a recording started from the picture check
+    TAIL_FRAGMENT_S = 180.0   # picture-triggered recording cut short by the next chart
+
+    def retuned(self):
+        """The receiver has just been retuned (called from the CAT thread):
+        audio from before belongs to another frequency, so the picture check
+        must not reach back into it, and waits a minute before looking."""
+        if self.state == "idle":
+            self.look.clear()
+            self.img_votes.clear()
+            self.idle_since = self.samples_seen / self.fs
+
     def _finish(self, reason: str):
         audio = np.concatenate(self.rec) if self.rec else np.zeros(0)
         meta = dict(self.rec_meta, end_reason=reason)
@@ -412,7 +460,12 @@ class Detector:
         self.preview = None
         dur = len(audio) / self.fs
         self.log(f"[{time.strftime('%H:%M:%S')}] transmission ended ({reason}), {dur:.0f} s")
-        if dur >= 60:
+        if meta.get("trigger") == "picture" and reason in ("new start tone", "new phasing") \
+                and dur < self.TAIL_FRAGMENT_S:
+            # picked up the last part of the chart before (e.g. just after a
+            # retune) and the next chart has begun: only a tail - not saved
+            self.log("  only the tail of the previous chart - discarded")
+        elif dur >= 60:
             self.on_recording(audio, self.fs, meta)
         else:
             self.log("  too short to be a fax - discarded")

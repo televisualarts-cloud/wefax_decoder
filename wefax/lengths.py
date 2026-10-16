@@ -66,9 +66,14 @@ class ChartLengths:
         self.log(f"chart length: {short} {slot}Z image ended {off / 60:.1f} min after the slot")
 
     def learnt_s(self, short: str, slot: str) -> float | None:
-        """Seconds from slot start to the end of the image (longest recent)."""
+        """Seconds from slot start to the end of the image: the median of the
+        recent measurements, so one wrong measurement (a chart credited to the
+        wrong slot) cannot move the deadline."""
         v = self.data.get(self.key(short, slot))
-        return max(v[-5:]) if v else None
+        if not v:
+            return None
+        r = sorted(v[-5:])
+        return r[len(r) // 2] if len(r) % 2 else 0.5 * (r[len(r) // 2 - 1] + r[len(r) // 2])
 
     def deadline(self, sched, short: str, slot: str, near: datetime):
         """(datetime, 'learnt'|'schedule', expected image end or None) or None."""

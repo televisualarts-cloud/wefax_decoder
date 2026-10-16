@@ -205,6 +205,11 @@ The auto-scheduler needs CAT. Press **AUTO** on the page, or start with
 
 ## The page
 
+- **Spectrum** (top right, beside the Tune button, on wide windows): the receiver audio
+  from 800 to 3000 Hz. The line is the spectrum averaged over 3 s with a dotted peak hold;
+  the waterfall below shows the last ~20 s. Orange lines mark black (1500 Hz) and white
+  (2300 Hz) shifted by the measured tuning offset; grey bands are where the noise for the
+  SNR is measured. It is left out when there is not enough room.
 - **Live panel** (top left):
   - green while a chart is being received;
   - orange **NO SIGNAL**, with the incoming noise, when a chart is due on the

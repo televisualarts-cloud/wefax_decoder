@@ -50,14 +50,16 @@ def parse_utc(text):
         return None
 
 
-def identify(sched, cat, station, utc_text, auto=None):
+def identify(sched, cat, station, utc_text, auto=None, quiet=False):
     """Which chart is this?
 
-    1. The auto-scheduler's plan: if it had tuned for a chart and the
-       reception started inside that chart's slot, that is the chart - unless
-       CAT shows the radio was clearly somewhere else that has a chart then.
-    2. Otherwise the SDR Console frequency (CAT) at the start time, or the
-       station picker, and the schedule slot nearest the start time.
+    The station: the auto-scheduler's plan says what it tuned (unless CAT
+    clearly shows the radio somewhere else that has a chart then), else the
+    SDR Console frequency (CAT) at the start time, else the station picker.
+    The chart: the scheduled slot of that station nearest the start of
+    reception - never just "the planned item that was still open", because
+    a station sends charts the plan skipped (already collected, low
+    importance) straight after the planned one.
     """
     if sched is None or not utc_text:
         return None
@@ -67,14 +69,17 @@ def identify(sched, cat, station, utc_text, auto=None):
     dial = cat.dial_khz_at(when) if cat else None
     p = sched.identify(when, dial, station)
     it = auto.item_at(when) if auto is not None else None
-    if it is not None:
-        ip = {"station": it.station, "short": it.short, "khz": it.khz, "slot": it.slot,
-              "contents": it.contents, "valid": it.valid}
-        if dial is None or abs(dial - it.dial) <= 1.5 or not (p and p.get("slot")):
-            if dial is not None and abs(dial - it.dial) > 1.5:
-                log.info("chart: CAT read %.1f kHz but the scheduler had tuned %s %.1f kHz - using the plan",
-                         dial, it.short, it.dial)
-            return ip
+    if it is not None and (dial is None or abs(dial - it.dial) <= 1.5 or not (p and p.get("slot"))):
+        if dial is not None and abs(dial - it.dial) > 1.5 and not quiet:
+            log.info("chart: CAT read %.1f kHz but the scheduler had tuned %s %.1f kHz - using the plan",
+                     dial, it.short, it.dial)
+        # on the station and frequency the scheduler tuned: the slot by time
+        q = sched.identify(when, it.dial, it.station)
+        if q and q.get("slot"):
+            q["khz"] = q.get("khz") or it.khz
+            return q
+        return {"station": it.station, "short": it.short, "khz": it.khz, "slot": it.slot,
+                "contents": it.contents, "valid": it.valid}
     return p
 
 
@@ -330,7 +335,7 @@ def station_info(sched, cat, station, s, auto=None) -> dict:
         start = now.timestamp() - float(s.get("elapsed", 0))
         # same rules as naming the saved fax: the plan, unless CAT clearly says otherwise
         p = identify(sched, cat, station, datetime.fromtimestamp(start, timezone.utc)
-                     .strftime("%Y-%m-%dT%H:%M:%SZ"), auto)
+                     .strftime("%Y-%m-%dT%H:%M:%SZ"), auto, quiet=True)
         if p:
             info["station"] = p["short"]
             if p.get("slot"):
@@ -517,11 +522,22 @@ def main():
 
     cap = LiveCapture(lambda fs: Detector(fs, proc.submit, status_cb,
                                           max_minutes=args.max_minutes, log=log.info,
-                                          on_preview=hub.set_live),
+                                          on_preview=hub.set_live,
+                                          on_spectrum=lambda d: hub.publish("spec", d)),
                       device=device, channel=args.channel, samplerate=args.samplerate, log=log.info)
     hub.capture = cap
     auto.decoder_busy = lambda: proc.busy > 0
     auto.force_end = lambda reason: cap.detector and cap.detector.request_finish(reason)
+    if cat is not None:
+        # every retune (scheduler, Tune button, chart chips) tells the detector,
+        # so the picture check never reaches back into the previous frequency
+        _tune = cat.tune
+
+        def tune_and_mark(khz, usb=True, _retry=0):
+            if cap.detector is not None:
+                cap.detector.retuned()
+            return _tune(khz, usb, _retry)
+        cat.tune = tune_and_mark
 
     def set_deadline(det):
         """Once a recording has started: when should this chart be over?"""
