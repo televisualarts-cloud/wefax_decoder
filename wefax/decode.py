@@ -556,6 +556,33 @@ def trim_edges(img, cimg, max_top=40, max_bot=12, align="end"):
     return img[top:K - bot], cimg[top:K - bot], top, bot
 
 
+SNR_FULL_DB = 12.0    # at or above this SNR the quality is not reduced ...
+SNR_ZERO_FACTOR = 0.6  # ... at 0 dB it is multiplied by this (linear in between)
+SNR_MIN_FACTOR = 0.5   # ... and never by less than this
+
+
+def snr_factor(snr_db) -> float:
+    """Quality multiplier for the signal-to-noise ratio during the picture:
+    1 at SNR_FULL_DB and above, SNR_ZERO_FACTOR at 0 dB, at least SNR_MIN_FACTOR."""
+    if snr_db is None:
+        return 1.0
+    f = SNR_ZERO_FACTOR + (1 - SNR_ZERO_FACTOR) * snr_db / SNR_FULL_DB
+    return float(min(1.0, max(SNR_MIN_FACTOR, f)))
+
+
+def image_snr(audio: np.ndarray, fs: float, a: int, b: int, win_s: float = 1.0):
+    """Median in-band SNR (dB) over the picture: the fax band (1440-2360 Hz)
+    against the noise either side, in 1 s windows - the same measure as the
+    live SNR on the page."""
+    w = int(win_s * fs)
+    if b - a < 5 * w:
+        a, b = 0, len(audio)
+    r = [dsp.band_ratio(audio[i:i + w], fs) for i in range(a, b - w, w)]
+    if len(r) < 5:
+        return None
+    return float(10 * np.log10(max(float(np.median(r)) - 1.0, 1e-3)))
+
+
 def decode_recording(audio: np.ndarray, fs: float, ioc=None, lpm=None,
                      align: str = "end", log=print, timeline=None) -> dict:
     audio = np.asarray(audio, np.float64)
@@ -693,7 +720,13 @@ def decode_recording(audio: np.ndarray, fs: float, ioc=None, lpm=None,
         img, cimg = apply_tears(img, tears), apply_tears(cimg, tears)
         log("tears corrected: " + ", ".join(f"line {r} ({s:+d} px)" for r, s in tears))
 
-    quality = float(np.mean(cimg > 0.5))
+    # quality: the share of the picture received on a steady signal, scaled
+    # by how far the signal stood above the noise while the picture was sent
+    steady = float(np.mean(cimg > 0.5))
+    snr_db = image_snr(audio, fs, int(max(0, s_first)), int(min(n, s_end)))
+    quality = steady * snr_factor(snr_db)
+    log(f"quality: {100 * steady:.0f}% steady x {snr_factor(snr_db):.2f} "
+        f"(SNR {'--' if snr_db is None else f'{snr_db:+.0f} dB'}) = {100 * quality:.0f}%")
     if align_how == "uncertain":
         # the chart may be split sideways: never let it count as a good copy
         # (it would replace the station copy and mark the chart as collected)
@@ -711,6 +744,7 @@ def decode_recording(audio: np.ndarray, fs: float, ioc=None, lpm=None,
             "tears": [[int(r), int(s)] for r, s in tears],
             "gaps_filled_ms": [round(n_ / fs * 1000, 1) for _, n_ in gaps],
             "click_rate": round(click_rate, 4), "quality": round(quality, 3),
+            "steady": round(steady, 3), "image_snr_db": None if snr_db is None else round(snr_db, 1),
             "duration_s": round(n / fs, 1),
             "afc_score": round(float(sc), 1),
         },

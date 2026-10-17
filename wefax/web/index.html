@@ -466,7 +466,9 @@ function status(s) {
     (s.snr_db !== undefined && s.snr_db > -25 ? `  ${s.snr_db > 0 ? '+' : ''}${s.snr_db.toFixed(0)} dB` : '');
 }
 // ---------------- live spectrum ----------------
-const SP = { avg: null, peak: null, wf: null, ref: 1e-6, afc: null, f0: 800, bin: 10, SMOOTH_S: 3, DT: 0.25 };
+// scale: the noise floor (a low percentile of the averaged spectrum) sits near
+// the bottom; signals rise above it, FLOOR_DB below to RANGE_DB above
+const SP = { avg: null, peak: null, wf: null, ref: 0, FLOOR_DB: 6, RANGE_DB: 40, afc: null, f0: 800, bin: 10, SMOOTH_S: 3, DT: 0.25 };
 const SPEC_MIN_W = 300, SPEC_MAX_W = 620;
 function specLayout() {
   // fit the box into the space right of the Tune button (and its message);
@@ -493,14 +495,15 @@ function onSpec(d) {
   const a = 1 - Math.exp(-SP.DT / SP.SMOOTH_S);           // peaks averaged over ~3 s
   const aw = 1 - Math.exp(-SP.DT / 0.4);                  // waterfall: light smoothing only
   const fall = Math.pow(10, -0.6 * SP.DT / SP.SMOOTH_S);  // peak hold falls 6 dB per 3 s
-  let mx = 1e-12;
   for (let i = 0; i < n; i++) {
     const p = Math.pow(10, (raw.charCodeAt(i) / 2 - 130) / 10);
     SP.avg[i] += a * (p - SP.avg[i]); SP.wf[i] += aw * (p - SP.wf[i]);
     SP.peak[i] = Math.max(SP.avg[i], SP.peak[i] * fall);
-    if (SP.avg[i] > mx) mx = SP.avg[i];
   }
-  SP.ref += 0.05 * (mx - SP.ref);
+  // noise floor: 20th percentile across the band (a fax fills well under 80 %
+  // of it), followed slowly in dB so the receiver's AGC does not make it jump
+  const fl = 10 * Math.log10(Array.from(SP.avg).sort((p, q) => p - q)[Math.floor(n * 0.2)] + 1e-14);
+  SP.ref = SP.ref ? SP.ref + 0.05 * (fl - SP.ref) : fl;
   SP.afc = d.afc; SP.f0 = d.f0; SP.bin = d.bin;
   drawSpec();
 }
@@ -508,8 +511,8 @@ function drawSpec() {
   const cv = $('spec'), g = cv.getContext('2d'), W = cv.width, H = cv.height, n = SP.avg.length;
   const F0 = SP.f0, F1 = SP.f0 + n * SP.bin, SH = 39, AX = 14, WF0 = SH + AX, WH = H - WF0;
   const X = f => (f - F0) / (F1 - F0) * W, B = f => Math.max(0, Math.min(n - 1, Math.floor((f - F0) / SP.bin)));
-  const dB = p => 10 * Math.log10(p / SP.ref);
-  const Y = p => 3 + (SH - 6) * (1 - (Math.max(-50, Math.min(3, dB(p))) + 50) / 53);
+  const dB = p => 10 * Math.log10(p + 1e-14) - SP.ref;        // dB above the noise floor
+  const Y = p => 3 + (SH - 6) * (1 - (Math.max(-SP.FLOOR_DB, Math.min(SP.RANGE_DB, dB(p))) + SP.FLOOR_DB) / (SP.FLOOR_DB + SP.RANGE_DB));
   // waterfall, kept off-screen (so the readout drawn over it is never scrolled
   // into the picture): scroll down one row, new row on top, then copy it in
   if (!SP.wfc || SP.wfc.width !== W || SP.wfc.height !== WH) {
@@ -520,7 +523,7 @@ function drawSpec() {
   if (WH > 2) wg.drawImage(SP.wfc, 0, 0, W, WH - 1, 0, 1, W, WH - 1);
   const row = wg.createImageData(W, 1);
   for (let x = 0; x < W; x++) {
-    const v = Math.max(0, Math.min(1, (dB(SP.wf[B(F0 + x / W * (F1 - F0))]) + 45) / 45)), o = x * 4;
+    const v = Math.max(0, Math.min(1, (dB(SP.wf[B(F0 + x / W * (F1 - F0))]) + 3) / (SP.RANGE_DB - 5))), o = x * 4;
     row.data[o] = 255 * Math.max(0, v - 0.6) / 0.4 * v; row.data[o + 1] = (40 + 190 * Math.min(1, v * 1.3)) * v;
     row.data[o + 2] = (60 + 195 * Math.min(1, v * 1.6)) * v; row.data[o + 3] = 255;
   }
@@ -801,7 +804,10 @@ async function loadPlan() {
   b.textContent = j.enabled ? 'AUTO ON' : 'AUTO OFF';
   b.disabled = !j.cat;
   if (!j.cat) b.title = 'Start the decoder with --cat COMx to enable the auto-scheduler';
-  $('autoMsg').textContent = j.enabled && j.paused_min ? `paused ${j.paused_min} min (manual tune)` : '';
+  const am = $('autoMsg');
+  am.textContent = j.audio_fault ? 'AUDIO FAULT? strong signal but no fax in 3 slots - check the audio input'
+    : j.enabled && j.paused_min ? `paused ${j.paused_min} min (manual tune)` : '';
+  am.style.color = j.audio_fault ? '#ffb347' : '';
   planCache = j; tickNext();
   const nowS = Date.now() / 1000;
   const nxt = (j.plan || []).find(x => x.state === 'planned' && x.start_ts > nowS - 60);

@@ -141,9 +141,9 @@ Everything is written under `./faxes/` (change this with `--out`):
 | `enhanced/<name>.png` | Cleaned chart at 2x resolution, with a title block top left: station, frequency, date, chart, model run and decode quality |
 | `thumbs/<name>.jpg` | Thumbnail for the page |
 | `stations/<station>/<chart>.png` | The latest copy of each chart, e.g. `stations/Northwood/Surface-Analysis.png`. A newer issue replaces it; a repeat of the same issue only replaces it if it decoded better. The `.json` beside it gives its quality and time |
-| `<name>.json` | Decode details: station and chart, IOC, LPM, AFC, clock ppm, quality, tears, etc. |
-| `proplog.jsonl` | The auto-scheduler's log of every attempt (SNR, quality) |
-| `chart_lengths.json` | How long each chart runs, learnt from charts that ended on their stop tone or end-of-frame black. A recording is closed 20 s after its chart should have ended (or 15 s before the next slot, for charts not yet learnt), so a faded chart never holds up the auto-scheduler |
+| `<name>.json` | Decode details: station and chart, IOC, LPM, AFC, clock ppm, quality, tears, etc. Quality is the share of the picture received on a steady signal (`steady`) times an SNR factor: 1 when the fax stood 12 dB or more above the noise during the picture (`image_snr_db`), falling to 0.6 at 0 dB. A chart counts as collected at 60 % |
+| `proplog.jsonl` | The auto-scheduler's log of every attempt (SNR, quality). A strong signal with no fax decoded is held back from it: three such slots in a row mean the audio reaching the decoder is broken (a virtual audio cable fault, the wrong input), so the page shows AUDIO FAULT? and nothing is counted against the frequencies until a fax decodes again |
+| `chart_lengths.json` | How long each chart runs, learnt from charts that ended on their stop tone or end-of-frame black. A recording is closed 20 s after its chart should have ended (or 15 s before the next slot, for charts not yet learnt), so a faded chart never holds up the auto-scheduler. If a picture is still coming in at that moment it is kept until its stop tone, end-of-frame black or the next chart's start (up to 90 s more) |
 | `settings.json` | Your audio input, CAT port, 1st/2nd priority stations and how many days to keep |
 
 Audio is not kept unless you add `--save-audio`.

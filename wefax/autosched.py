@@ -122,6 +122,10 @@ DX_BACKOFF_MAX_DAYS = 7   # longest pause for a DX frequency/time block after fa
 DX_MIN_PRIOR = 0.10       # below this the propagation model calls a DX path hopeless
 DX_GIVE_UP_S = 240        # silent DX probe: abandoned this long after its slot start ...
 DX_GIVE_UP_SNR = 0.0      # ... if the SNR has stayed below this (dB) and nothing was received
+AUDIO_SUSPECT_SNR = 5.0   # a slot with a signal this strong (dB) but no fax decoded is suspicious ...
+AUDIO_FAULT_COUNT = 3     # ... this many in a row with no decode in between = the audio path is broken
+AUDIO_OK_QUALITY = 0.2   # any decode at least this good shows the audio path works
+AUDIO_HOLD_H = 6.0        # suspicious failures held back from the learning log at most this long
 
 
 def lead_hours(c: str) -> int | None:
@@ -693,6 +697,10 @@ class AutoScheduler:
         self.force_end = None          # set by the main program: ends the recording in progress
         self._forced_t = 0.0
         self.last_snr = None
+        # audio-path check: failures held back while it is unclear whether the
+        # radio audio reaching the decoder is sound (see _log_item)
+        self.held: list[tuple[dict, bool, float]] = []
+        self.audio_fault = False
         self._last_plan = 0.0
         self._lock = threading.Lock()
         self._stop = False
@@ -794,6 +802,8 @@ class AutoScheduler:
             self.proplog.add({"utc": utc, "short": product["short"], "khz": product["khz"],
                               "slot": product.get("slot"), "snr_db": None if snr is None else round(snr, 1),
                               "quality": q, "key": None, "kind": "manual", "hour": when.hour})
+        if q >= AUDIO_OK_QUALITY:
+            self._audio_ok()
         if q >= GOOD_QUALITY:
             self.replan()                            # drop repeats of what we now have
 
@@ -926,12 +936,67 @@ class AutoScheduler:
         snr = sorted(it.snr)[len(it.snr) // 2] if it.snr else None
         if it.result and it.result.get("snr_db") is not None:
             snr = round(float(it.result["snr_db"]), 1)   # measured during the chart itself
-        self.proplog.add({"utc": it.start.strftime("%Y-%m-%dT%H:%M:%SZ"), "short": it.short, "khz": it.khz,
-                          "slot": it.slot, "snr_db": snr, "quality": round(quality, 3), "key": it.key,
-                          "kind": it.kind, "hour": it.start.hour})
+        rec = {"utc": it.start.strftime("%Y-%m-%dT%H:%M:%SZ"), "short": it.short, "khz": it.khz,
+               "slot": it.slot, "snr_db": snr, "quality": round(quality, 3), "key": it.key,
+               "kind": it.kind, "hour": it.start.hour}
+        if not self._audio_check(rec, quality, snr):
+            return
+        self.proplog.add(rec)
         verdict = "good" if quality >= (GOOD_QUALITY if it.kind == "core" else DX_GOOD_QUALITY) else "poor/none"
         self.logf(f"auto: logged {it.short} {it.khz} kHz {it.slot}Z  SNR "
                   f"{'--' if snr is None else f'{snr:+.0f} dB'}  quality {quality:.2f} ({verdict})")
+
+    # -------- audio-path check
+    # A strong signal with no fax decoded, slot after slot, says the audio
+    # reaching the decoder is broken (a virtual audio cable gone wrong, the
+    # wrong input, the receiver's audio routed elsewhere), not that the
+    # frequencies are poor.  Such failures are held back from the learning
+    # log; AUDIO_FAULT_COUNT of them with no decode in between raise a warning
+    # and are dropped, as is every failure until a fax decodes again.  Fewer
+    # than that are real failures and are logged once a fax decodes (or after
+    # AUDIO_HOLD_H hours).
+    def _audio_check(self, rec: dict, quality: float, snr) -> bool:
+        """True: log this result now.  False: held back or dropped."""
+        if quality >= AUDIO_OK_QUALITY:
+            self._audio_ok()
+            return True
+        if self.audio_fault:
+            self.logf(f"auto: {rec['short']} {rec['khz']} kHz {rec['slot']}Z not counted - "
+                      f"audio fault suspected")
+            return False
+        now = time.time()
+        if self.held and now - self.held[0][2] > AUDIO_HOLD_H * 3600:
+            self._flush_held()
+        suspect = snr is not None and snr >= AUDIO_SUSPECT_SNR
+        if not suspect and not self.held:
+            return True
+        self.held.append((rec, suspect, now))
+        n = sum(1 for _, sus, _ in self.held if sus)
+        if n >= AUDIO_FAULT_COUNT:
+            self.audio_fault = True
+            self.logf(f"auto: WARNING - {n} slots in a row with a strong signal (SNR >= "
+                      f"{AUDIO_SUSPECT_SNR:+.0f} dB) but no fax decoded: the audio reaching the decoder "
+                      f"looks broken (check the virtual audio cable / input). Results are not counted "
+                      f"against the frequencies until a fax decodes again.")
+            self.held.clear()
+        else:
+            self.logf(f"auto: {rec['short']} {rec['khz']} kHz {rec['slot']}Z  SNR "
+                      f"{'--' if snr is None else f'{snr:+.0f} dB'}  no fax - held back until a fax "
+                      f"decodes (audio check)")
+        return False
+
+    def _audio_ok(self):
+        if self.audio_fault:
+            self.audio_fault = False
+            self.logf("auto: a fax decoded again - audio path OK, results counted again")
+        self._flush_held()
+
+    def _flush_held(self):
+        held, self.held = self.held, []
+        for rec, _, _ in held:
+            self.proplog.add(rec)
+            self.logf(f"auto: logged {rec['short']} {rec['khz']} kHz {rec['slot']}Z  quality 0.00 "
+                      f"(held back, now counted)")
 
     def item_at(self, when: datetime, dial: float | None = None):
         """The plan item the scheduler had tuned for at this time (or None).
@@ -955,4 +1020,4 @@ class AutoScheduler:
             upcoming = [i.to_json() for i in self.items if i.end > now][:8]
         return {"enabled": self.enabled, "paused_min": max(0, int((self.paused_until - time.time()) / 60)),
                 "current": self.current.to_json() if self.current else None, "plan": upcoming,
-                "priorities": self.priorities}
+                "priorities": self.priorities, "audio_fault": self.audio_fault}
