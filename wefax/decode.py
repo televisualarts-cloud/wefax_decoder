@@ -151,7 +151,12 @@ def segment_tones(fr: np.ndarray, mag: np.ndarray, fs: float, block_s: float = 0
     min_stop = res["start_end"] + int(60 * fs)
     sp = [r for r in runs("stop") if r[1] - r[0] >= 4 and r[0] * nb > min_stop]
     if sp:
-        res["stop"] = sp[0][0] * nb
+        # the stop tone ends the chart, so it is the last such run - and a real
+        # one lasts ~5 s.  Fine hatching in a chart (WAFC SIGWX cloud areas)
+        # can look like the stop tone for a second or two mid-picture; taking
+        # the first run cut such charts off after a few dozen lines.
+        long_ = [r for r in sp if r[1] - r[0] >= 8]
+        res["stop"] = (long_ or sp)[-1][0] * nb
     return res
 
 
@@ -250,7 +255,8 @@ def find_phasing(v: np.ndarray, fs: float, s0: int, s1: int, lpms=LPM_CANDIDATES
         cand = {"lpm": lpm, "T": float(Tfit), "a": float(a0),
                 "first": int(bi), "last": int(bj), "n": int(keep.sum()),
                 "s0": s0, "Tnom": T,
-                "end": float(a0 + Tfit * (mi[keep].max() + 1))}
+                "end": float(a0 + Tfit * (mi[keep].max() + 1)),
+                "pulses": absy[keep], "pulse_idx": mi[keep]}
         # sanity: fitted period within 0.2% of nominal
         if abs(Tfit / T - 1) > 2e-3:
             continue
@@ -357,6 +363,40 @@ def residual_slant(v, s_first, T, K, W, block=160):
 
 
 SEAM_MIN_CONF = 4.5   # line-start seam this distinct (std devs) is trusted
+SEAM_ALONE_CONF = 8.0  # ... and this distinct to be trusted with nothing else to confirm it
+REF_MIN_RATIO = 8.0    # frame match with the last good copy: peak this far above the rest is trusted
+REF_ALONE_RATIO = 12.0  # ... and this far to be trusted on its own
+REF_MIN_R = 0.5         # ... with the column profiles at least this alike (0.7 on its own)
+REF_ALONE_R = 0.7
+AGREE_PX = 40          # two line-start estimates within this many pixels agree (2 % of the line:
+                       # stations differ a little in where the picture starts after the phasing
+                       # pulse; the misframes this guards against are hundreds of pixels)
+
+
+def reference_shift(pic: np.ndarray, ref: np.ndarray):
+    """Where the frame of this picture lies compared with the last good copy
+    of the same chart (same station and chart: same frame, grid, title box).
+    Returns (m, ratio, r): the line start is m columns to the right of the
+    current one; ratio = how far the match stands above every other offset;
+    r = how alike the two column profiles are at that offset."""
+    if ref is None or ref.shape[1] != pic.shape[1]:
+        return None, 0.0, 0.0
+    W = pic.shape[1]
+    prof = lambda im: ndimage.uniform_filter1d(1.0 - im, 1, axis=0).mean(0)
+    pp, pr = prof(pic), prof(ref)
+    hp = lambda x: x - ndimage.uniform_filter1d(x, 31, mode="wrap")
+    pp, pr = hp(pp), hp(pr)
+    c = np.fft.irfft(np.fft.rfft(pr) * np.conj(np.fft.rfft(pp)), n=W)
+    k = int(np.argmax(c))
+    excl = np.abs(((np.arange(W) - k + W // 2) % W) - W // 2) > 10
+    ratio = float(c[k] / (np.median(np.abs(c[excl])) + 1e-12))
+    r = float(np.corrcoef(np.roll(pp, k), pr)[0, 1])
+    return int((-k) % W), ratio, r
+
+
+def _circ_dist(a: int, b: int, W: int) -> int:
+    d = abs(a - b) % W
+    return min(d, W - d)
 
 
 def find_line_start(img: np.ndarray, gap: int = 2):
@@ -583,8 +623,20 @@ def image_snr(audio: np.ndarray, fs: float, a: int, b: int, win_s: float = 1.0):
     return float(10 * np.log10(max(float(np.median(r)) - 1.0, 1e-3)))
 
 
+AFC_NEAR_HZ = 80.0      # tuning offsets are searched this close to the usual offset first ...
+AFC_FAR_RATIO = 1.6     # ... a farther one is taken only if its spectral lines are this much stronger
+CLOCK_SEARCH_PPM = 25.0  # line period searched this close to the station's learnt clock (and phasing
+                         # further from it than this is not trusted); measured spread is +/-2 ppm
+
+
 def decode_recording(audio: np.ndarray, fs: float, ioc=None, lpm=None,
-                     align: str = "end", log=print, timeline=None) -> dict:
+                     align: str = "end", log=print, timeline=None, clock_hint_ppm=None,
+                     afc_hint_hz=None, reference=None) -> dict:
+    """clock_hint_ppm / afc_hint_hz: this installation's sound-card clock error
+    and tuning offset, measured on its own recent charts with phasing (both
+    barely change).  The clock steadies charts without phasing; the offset
+    is where the tuning search starts.  None (a new installation): 0 Hz and
+    the full-range searches."""
     audio = np.asarray(audio, np.float64)
     audio, gaps = fill_gaps(audio, fs, timeline, log)
     audio = audio - audio.mean()
@@ -594,8 +646,23 @@ def decode_recording(audio: np.ndarray, fs: float, ioc=None, lpm=None,
     log(f"decode: {n / fs:.1f} s of audio at {fs:.0f} Hz")
 
     # 1-2. AFC: global spectral comb, then 20 s windowed drift track
-    off, sc = dsp.psd_comb(audio, fs, search=300.0)
+    # The offset of a receiver barely changes from chart to chart; charts with
+    # fine hatching (WAFC SIGWX) can show stronger false lines 200 Hz away,
+    # which wrecks the levels and hides the phasing.  Look near the usual
+    # offset first (0 Hz until this installation has measured its own).
+    c0 = float(afc_hint_hz or 0.0)
+    off, sc = dsp.psd_comb(audio, fs, centre=c0, search=AFC_NEAR_HZ)
+    off_w, sc_w = dsp.psd_comb(audio, fs, search=300.0)
+    if abs(off_w - c0) > AFC_NEAR_HZ and sc_w > AFC_FAR_RATIO * sc:
+        off, sc = off_w, sc_w
+    elif abs(off_w - off) > 20:
+        log(f"AFC: ignored a stronger-looking offset of {off_w:+.0f} Hz (score {sc_w:.0f}) "
+            f"far from the usual {c0:+.0f} Hz - using {off:+.0f} Hz (score {sc:.0f})")
     drift, drift_pp = track_drift(audio, fs, off)
+    if abs(off - c0) <= AFC_NEAR_HZ:
+        # the 20 s drift track must not wander off to a stronger non-fax
+        # signal either (it walked from +64 to +104 Hz on interference)
+        drift = np.clip(drift, c0 - AFC_NEAR_HZ, c0 + AFC_NEAR_HZ).astype(drift.dtype)
     afc_hz = float(np.median(drift))
     log(f"AFC: offset {afc_hz:+.1f} Hz (score {sc:.0f}), drift p-p {drift_pp:.1f} Hz")
     fr, strength = dsp.demod(audio, fs, dsp.CENTRE_HZ, drift=drift, post_cut=1100.0)
@@ -645,8 +712,33 @@ def decode_recording(audio: np.ndarray, fs: float, ioc=None, lpm=None,
     else:
         lpm = lpm or 120
         T = fs * 60.0 / lpm
-        log(f"phasing: not found, assuming {lpm} LPM")
+        if clock_hint_ppm is not None:
+            T *= 1 + clock_hint_ppm * 1e-6
+            log(f"phasing: not found, assuming {lpm} LPM and the usual clock ({clock_hint_ppm:+.0f} ppm)")
+        else:
+            log(f"phasing: not found, assuming {lpm} LPM")
     Tnom = fs * 60.0 / lpm
+    # A few broken phasing lines (a fade, or the receiver stepping through
+    # frequencies) can give a period far from this installation's own clock,
+    # which barely changes: then the clock is trusted instead (a +800 ppm
+    # phasing estimate sheared a chart by a pixel a line).
+    ph_period_rejected = False
+    ppm_ph = (T / Tnom - 1) * 1e6 if ph else None
+    if ph and clock_hint_ppm is not None:
+        if abs(ppm_ph - clock_hint_ppm) > CLOCK_SEARCH_PPM:
+            T = Tnom * (1 + clock_hint_ppm * 1e-6)
+            ph_period_rejected = True
+            # the pulses themselves still mark where each line starts: re-fit
+            # only their position, with the period fixed at the usual clock
+            pk, mi = ph["pulses"], ph["pulse_idx"]
+            ph["a"] = float(np.median(pk - T * mi))
+            ph["end"] = float(ph["a"] + T * (mi.max() + 1))
+            ph["T"] = T
+            spread = float(np.median(np.abs(pk - (ph["a"] + T * mi))))
+            ph["spread"] = spread
+            log(f"phasing period {ppm_ph:+.0f} ppm is far from the usual clock ({clock_hint_ppm:+.0f} ppm) - "
+                f"using the usual clock; line start re-fitted to the {len(pk)} phasing pulses "
+                f"(spread {spread:.1f} samples)")
 
     # final post-detection filter, matched to pixel Nyquist
     px_rate = W * lpm / 60.0
@@ -676,24 +768,70 @@ def decode_recording(audio: np.ndarray, fs: float, ioc=None, lpm=None,
     # 6. slant
     # few phasing lines (fade during phasing) -> period estimate is rough: search wider
     rng = 60.0 if (ph and ph["n"] >= 30) else (300.0 if ph else 700.0)
-    T2, contrast = refine_period(v, s_first, T, K, rng)
-    if contrast > 1.15 or not ph:
+    T_search = T
+    if clock_hint_ppm is not None:
+        # the clock barely changes: search near the station's learnt value, with
+        # or without phasing.  A wide search can lock onto a wrong period that
+        # lines up hatching or a diagonal, shearing the chart (~1 px a line at 550 ppm)
+        T_search, rng = Tnom * (1 + clock_hint_ppm * 1e-6), CLOCK_SEARCH_PPM
+    T2, contrast = refine_period(v, s_first, T_search, K, rng)
+    if contrast > 1.15 or not ph or ph_period_rejected:
         T = T2
     corr = residual_slant(v, s_first, T, K, W)
     starts = s_first + np.arange(K) * T + corr
-    align_how, align_conf = "phasing", None
-    if not ph:
-        # no phasing heard: find where each line starts from the picture itself
-        pos = starts[:, None] + np.arange(W)[None, :] * (T / W)
-        pic = _gather(v, pos)
-        m, align_conf = find_line_start(pic)
-        if align_conf >= SEAM_MIN_CONF:
-            align_how = "seam"
+    # line start (framing): up to three independent estimates - the phasing
+    # pulses, the picture's own seam, and the frame of the last good copy of
+    # the same chart - and the decision rests on two of them agreeing
+    pos = starts[:, None] + np.arange(W)[None, :] * (T / W)
+    pic = _gather(v, pos)
+    m_seam, align_conf = find_line_start(pic)
+    m_ref, ref_ratio, ref_r = reference_shift(pic, reference)
+    cands = {}
+    if ph:
+        cands["phasing"] = 0
+    if align_conf >= SEAM_MIN_CONF:
+        cands["seam"] = int(m_seam)
+    if m_ref is not None and ref_ratio >= REF_MIN_RATIO and ref_r >= REF_MIN_R:
+        cands["reference"] = int(m_ref)
+    near = lambda a, b: a in cands and b in cands and _circ_dist(cands[a], cands[b], W) <= AGREE_PX
+    # strong: the phasing pulses (enough of them, fitting well) and a clear frame
+    # match with the last good copy.  Weak: the seam, which a faint line in the
+    # chart can fool - it confirms, but never overrules a strong estimate.
+    ph_ok = bool(ph) and ph["n"] >= 10 and (not ph_period_rejected or ph.get("spread", 0) < 3.0)
+    if ph_ok and "reference" in cands:
+        if near("phasing", "reference"):
+            pick, align_ok, verdict = "phasing", True, "phasing and reference agree"
         else:
-            m = find_margin(pic[::4])          # last resort: the quietest band
-            align_how = "uncertain"
-        log(f"line start: column {m} from the picture ({align_how}, confidence {align_conf:.1f})")
+            pick, align_ok, verdict = "reference", False, "phasing and reference disagree"
+    elif ph_ok:
+        pick, align_ok, verdict = "phasing", True, "phasing (seam not needed)"
+    elif near("reference", "seam"):
+        pick, align_ok, verdict = "seam", True, "reference and seam agree"
+    elif "phasing" in cands and (near("phasing", "reference") or near("phasing", "seam")):
+        other = "reference" if near("phasing", "reference") else "seam"
+        pick, align_ok, verdict = "phasing", True, f"weak phasing confirmed by {other}"
+    elif "reference" in cands and ref_ratio >= REF_ALONE_RATIO and ref_r >= REF_ALONE_R \
+            and not ("seam" in cands and align_conf >= SEAM_ALONE_CONF):
+        pick, align_ok, verdict = "reference", True, "clear match with the last good copy"
+    elif list(cands) == ["seam"] and align_conf >= SEAM_ALONE_CONF:
+        pick, align_ok, verdict = "seam", True, "very clear seam, nothing else to go on"
+    elif cands:
+        pick = next(n for n in ("reference", "phasing", "seam") if n in cands)
+        align_ok, verdict = False, "not confirmed: " + ("estimates disagree" if len(cands) > 1
+                                                         else f"{pick} alone is not enough")
+    else:
+        pick, align_ok, verdict = None, False, "no estimate"
+    if pick is None:
+        m = find_margin(pic[::4])              # last resort: the quietest band
+        align_how = "uncertain"
+    else:
+        m, align_how = cands[pick], pick
+    log("line start: " + ", ".join(f"{k} {v}" for k, v in cands.items()) +
+        f" (seam confidence {align_conf:.1f}, reference match {ref_ratio:.1f}/{ref_r:.2f}) -> {align_how}: {verdict}")
+    if m:
         starts = starts + m * T / W
+    align_votes = {k: int(v) for k, v in cands.items()}
+
     K = int(np.sum(starts + T < n))
     starts = starts[:K]
     clock_ppm = (T / Tnom - 1) * 1e6
@@ -715,7 +853,9 @@ def decode_recording(audio: np.ndarray, fs: float, ioc=None, lpm=None,
     K = img.shape[0]
     hint_rows = [int(round((p - s_first) / T)) - top for p, _ in gaps]
     hint_rows = [h for h in hint_rows if 0 < h < K - 1]
-    tears = find_tears(img, hints=hint_rows)
+    # live recordings carry the flywheel's record of lost audio: tears can
+    # only be where it found gaps.  Files without it are searched blind.
+    tears = find_tears(img, hints=hint_rows, blind=not (timeline is not None and len(timeline) > 50))
     if tears:
         img, cimg = apply_tears(img, tears), apply_tears(cimg, tears)
         log("tears corrected: " + ", ".join(f"line {r} ({s:+d} px)" for r, s in tears))
@@ -739,6 +879,9 @@ def decode_recording(audio: np.ndarray, fs: float, ioc=None, lpm=None,
             "ioc": int(ioc), "lpm": int(lpm), "width": W, "lines": int(K),
             "afc_hz": round(afc_hz, 1), "drift_pp_hz": round(drift_pp, 1),
             "clock_ppm": round(clock_ppm, 1), "phasing": bool(ph), "align": align_how,
+            "align_ok": bool(align_ok), "align_votes": align_votes,
+            "ref_match": round(ref_ratio, 1), "period_from_phasing": bool(ph) and not ph_period_rejected,
+            "phasing_ppm": None if ppm_ph is None else round(ppm_ph, 1),
             "align_conf": None if align_conf is None else round(align_conf, 1),
             "start_tone": tones["start"] is not None, "stop_tone": tones["stop"] is not None,
             "tears": [[int(r), int(s)] for r, s in tears],

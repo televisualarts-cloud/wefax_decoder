@@ -140,7 +140,7 @@ Everything is written under `./faxes/` (change this with `--out`):
 | `raw/<name>.png` | Decoded chart: geometry corrected, no cleaning |
 | `enhanced/<name>.png` | Cleaned chart at 2x resolution, with a title block top left: station, frequency, date, chart, model run and decode quality |
 | `thumbs/<name>.jpg` | Thumbnail for the page |
-| `stations/<station>/<chart>.png` | The latest copy of each chart, e.g. `stations/Northwood/Surface-Analysis.png`. A newer issue replaces it; a repeat of the same issue only replaces it if it decoded better. The `.json` beside it gives its quality and time |
+| `stations/<station>/<chart>.png` | The latest **verified** copy of each chart, e.g. `stations/Northwood/Surface-Analysis.png` - this is the folder to publish from. Only charts that pass every check below get here; a newer issue replaces it, a repeat of the same issue only if it decoded better. The `.json` beside it gives its quality and time |
 | `<name>.json` | Decode details: station and chart, IOC, LPM, AFC, clock ppm, quality, tears, etc. Quality is the share of the picture received on a steady signal (`steady`) times an SNR factor: 1 when the fax stood 12 dB or more above the noise during the picture (`image_snr_db`), falling to 0.6 at 0 dB. A chart counts as collected at 60 % |
 | `proplog.jsonl` | The auto-scheduler's log of every attempt (SNR, quality). A strong signal with no fax decoded is held back from it: three such slots in a row mean the audio reaching the decoder is broken (a virtual audio cable fault, the wrong input), so the page shows AUDIO FAULT? and nothing is counted against the frequencies until a fax decodes again |
 | `chart_lengths.json` | How long each chart runs, learnt from charts that ended on their stop tone or end-of-frame black. A recording is closed 20 s after its chart should have ended (or 15 s before the next slot, for charts not yet learnt), so a faded chart never holds up the auto-scheduler. If a picture is still coming in at that moment it is kept until its stop tone, end-of-frame black or the next chart's start (up to 90 s more) |
@@ -153,6 +153,34 @@ the top of the page (default 28; the choice is saved). Once a night, at the
 first quiet moment after 00:05 local time (nothing being received or decoded),
 older faxes are deleted from `raw/`, `enhanced/`, `thumbs/` and `audio/`. The
 `stations/` copies, the learning history and your settings are never deleted.
+
+## Correct first time: how a chart is checked before it is published
+
+A chart is framed by three things: its tuning offset, its line period (slant)
+and where each line starts. Each is decided from independent estimates, and a
+chart is only published (copied to `stations/`) when they hold up:
+
+- **Tuning offset and line period** are anchored to what this installation
+  has learnt, per station, from its own charts decoded with phasing (the
+  transmitters' clocks differ - here DWD about +5 ppm, Northwood about
+  -33 ppm). A misleading chart (fine hatching, interference, broken phasing)
+  cannot push them far from normal. If the phasing of five charts in a row
+  agrees with itself but not with the learnt clock, the clock has changed
+  (new sound card, other cable) and the new value is learnt.
+- **Line start** comes from the phasing pulses, the frame of the last
+  verified copy of the same chart, and the picture's own seam. Phasing that
+  fits well is trusted unless the reference frame contradicts it; otherwise
+  two estimates must agree (within 2 % of the line), or one must be very
+  clear. The seam, which a faint line in a chart can fool, confirms but never
+  overrules.
+- **Tears** are only corrected where the flywheel recorded lost audio.
+- **Before publishing**: framing confirmed, slant and tuning within 80 ppm /
+  80 Hz of the station's learnt values, no unexplained tear, quality 50 % or
+  better, and fax structure present.
+
+A chart that fails is still saved in the gallery, marked **NOT PUBLISHED**
+with the reason on the page, but the station copy is left as it was and the
+chart counts as not collected, so the scheduler goes after a repeat.
 
 ## SDR Console CAT
 
@@ -206,6 +234,24 @@ The auto-scheduler needs CAT. Press **AUTO** on the page, or start with
   estimate based on path length and sun height: at the path mid-point for
   paths up to 2000 km, and also 1000 km in from each end on longer paths (the
   darkest point limits the MUF, the sunniest sets the absorption).
+- **Comparing frequencies on air:** for a chart sent on several frequencies at
+  once (Northwood, DWD and many others), the scheduler tunes each one in turn
+  before the chart starts, while the previous chart or the station's steady
+  carrier is on air, and reads its SNR for about 4 s. It receives the chart on
+  the best one if that is at least 3 dB better than the planned frequency. The
+  scan finishes at least 10 s before the start tone. If nothing is on air on
+  any frequency it keeps the plan. The readings are logged (`"kind": "scan"`)
+  and feed the next frequency choice.
+  From the start tone to the picture the receiver is never retuned, so the
+  phasing lines (which set the line timing and framing) arrive undisturbed.
+  If nothing at all is heard 20 s after a chart's start time, the planned
+  frequency may be off air: the other frequencies are tried and the scheduler
+  stays on the best one, where the picture check picks the chart up (without
+  its first few lines).
+- **Centring the receiver:** every retune hops 200 kHz above and below the
+  target for half a second each before settling on it, so SDR Console moves its
+  spectrum span and the frequency lands near the middle rather than at an edge.
+  `HOP_KHZ` in `wefax/cat.py` sets the hop (0 turns it off).
 - **Learning:** DX combinations of station, frequency and time of day that
   keep failing are retried after 1, 2 and 4 days, then every 7 days, so
   improving propagation is noticed. Old results fade out gradually, so
@@ -310,7 +356,7 @@ sideways.
 4. The background gets light non-local-means denoising. Faint greys fade
    gradually into the paper rather than being cut off, so weak or noisy text
    stays readable. The result is upscaled 2x with FSRCNN.
-5. Paper is shown at 92% white rather than full white (`WHITE_LEVEL` in
+5. Paper is shown at 96% white rather than full white (`WHITE_LEVEL` in
    `wefax/enhance.py`), which is easier on the eye and keeps detail on screens
    that clip near white.
 

@@ -45,7 +45,7 @@ class CatReader:
         self._ser = None
         self._lock = threading.Lock()
         self._stop = False
-        self._pending: list[bytes] = []
+        self._pending: list = []          # commands (bytes) and pauses (seconds)
         self._new_port = _UNSET
         threading.Thread(target=self._run, daemon=True).start()
 
@@ -117,6 +117,9 @@ class CatReader:
                 with self._lock:
                     pend, self._pending = self._pending, []
                 for p in pend:
+                    if isinstance(p, (int, float)):
+                        time.sleep(p)            # a pause between tuning hops
+                        continue
                     self._ser.write(p)
                     time.sleep(0.05)
                 if pend:
@@ -188,14 +191,30 @@ class CatReader:
             held[f] = held.get(f, 0.0) + max(0.0, min(nxt[0], b) - ts)
         return max(held, key=held.get) / 1000.0
 
-    def tune(self, khz: float, usb: bool = True, _retry: int = 0):
+    # Every retune first hops HOP_KHZ above and below the target, HOP_S on each,
+    # then settles on it.  SDR Console moves its spectrum span when the tune
+    # frequency leaves it, so the final frequency lands near the middle of the
+    # span instead of near an edge, where the SDR's own filtering weakens the
+    # signal.  HOP_KHZ = 0 turns this off.
+    HOP_KHZ = 200.0
+    HOP_S = 0.5
+
+    def tune(self, khz: float, usb: bool = True, _retry: int = 0, hop: bool = True):
         """Set the receiver (sent on the polling thread)."""
         hz = int(round(khz * 1000))
-        cmds = [f"F{self.letter}{hz:011d};".encode()] + ([b"MD2;"] if usb else [])
+        fa = lambda f: f"F{self.letter}{int(f):011d};".encode()
+        cmds: list = []
+        hop = int(self.HOP_KHZ * 1000) if hop else 0     # hop=False: straight there (frequency scans)
+        if hop and _retry == 0:
+            cmds += [fa(hz + hop), self.HOP_S, fa(max(100_000, hz - hop)), self.HOP_S]
+        cmds += [fa(hz)] + ([b"MD2;"] if usb else [])
+        settle = 2 * self.HOP_S if hop and _retry == 0 else 0.0
         with self._lock:
             self._pending.extend(cmds)
-            self._want = (hz, time.time(), _retry, usb)
-        self.log(f"CAT: sent {b''.join(cmds).decode()}")
+            self._want = (hz, time.time() + settle, _retry, usb)
+        hops = f" (via {(hz + hop) / 1000:.0f} and {max(100_000, hz - hop) / 1000:.0f} kHz to centre the span)" \
+            if settle else ""
+        self.log(f"CAT: sent {fa(hz).decode()}{'MD2;' if usb else ''}{hops}")
 
     def _check_tune(self):
         """After a tune: confirm the radio went there; resend once, then say so."""

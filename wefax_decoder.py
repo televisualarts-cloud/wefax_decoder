@@ -40,6 +40,7 @@ except ImportError:
     sys.exit("OpenCV is required:  pip install opencv-python-headless")
 
 log = logging.getLogger("wefax")
+PICTURE_LATE_MAX_S = 15 * 60   # picture-check recording after its chart's time: closed within this
 NO_SIGNAL_SCORE = 6.0     # AFC comb score: pure noise ~2, weakest real faxes ~19
 
 
@@ -50,7 +51,7 @@ def parse_utc(text):
         return None
 
 
-def identify(sched, cat, station, utc_text, auto=None, quiet=False, end=None):
+def identify(sched, cat, station, utc_text, auto=None, quiet=False, end=None, mid=False):
     """Which chart is this?
 
     The station: the auto-scheduler's plan says what it tuned (unless CAT
@@ -71,14 +72,14 @@ def identify(sched, cat, station, utc_text, auto=None, quiet=False, end=None):
     if when is None:
         return None
     dial = cat.dial_khz_during(when, end) if cat else None
-    p = sched.identify(when, dial, station)
+    p = sched.identify(when, dial, station, mid)
     it = auto.item_at(when, dial) if auto is not None else None
     if it is not None and (dial is None or abs(dial - it.dial) <= 1.5 or not (p and p.get("slot"))):
         if dial is not None and abs(dial - it.dial) > 1.5 and not quiet:
             log.info("chart: CAT read %.1f kHz but the scheduler had tuned %s %.1f kHz - using the plan",
                      dial, it.short, it.dial)
         # on the station and frequency the scheduler tuned: the slot by time
-        q = sched.identify(when, it.dial, it.station)
+        q = sched.identify(when, it.dial, it.station, mid)
         if q and q.get("slot"):
             q["khz"] = q.get("khz") or it.khz
             return q
@@ -160,15 +161,20 @@ def run_key(product: dict, utc: str) -> str | None:
         return None
 
 
+def station_paths(out: Path, product):
+    """stations/<station>/<chart>.png and .json for a chart."""
+    folder = out / "stations" / re.sub(r"[^A-Za-z0-9_.-]", "_", product["short"])
+    name = re.sub(r"[^A-Za-z0-9_.-]", "_", slug(product["contents"]))
+    return folder / f"{name}.png", folder / f"{name}.json"
+
+
 def keep_station_copy(out: Path, product, img_u8, quality: float, utc: str, source_id: str):
     """stations/<station>/<chart>.png: always the latest copy of each chart.
     A newer issue replaces it; a repeat of the same issue only replaces it
     if it decoded better."""
     if not product or not product.get("slot") or not product.get("contents"):
         return
-    folder = out / "stations" / re.sub(r"[^A-Za-z0-9_.-]", "_", product["short"])
-    name = re.sub(r"[^A-Za-z0-9_.-]", "_", slug(product["contents"]))
-    png, info = folder / f"{name}.png", folder / f"{name}.json"
+    png, info = station_paths(out, product)
     key = run_key(product, utc)
     try:
         old = json.loads(info.read_text()) if info.exists() else None
@@ -180,7 +186,7 @@ def keep_station_copy(out: Path, product, img_u8, quality: float, utc: str, sour
         return
     save_image(png, img_u8)
     rec = {"run": key, "quality": round(quality, 3), "utc": utc, "fax": source_id,
-           "chart": product.get("contents"), "valid": product.get("valid")}
+           "chart": product.get("contents"), "valid": product.get("valid"), "verified": True}
     tmp = info.with_name(info.name + ".part")
     tmp.write_text(json.dumps(rec, indent=1))
     os.replace(tmp, info)
@@ -234,7 +240,122 @@ class Processor:
         self.q: queue.Queue = queue.Queue()
         self.busy = 0
         self.done = 0
+        self.learnt = self._recent_clocks()
         threading.Thread(target=self._run, daemon=True).start()
+
+    CLOCK_KEEP = 30
+
+    def _recent_clocks(self) -> dict:
+        """Clock error (ppm) and tuning offset (Hz) measured on this
+        installation's own charts decoded with phasing, per station (the
+        transmitters' clocks differ: DWD about +5 ppm, Northwood about -33
+        ppm here) and for all stations together ("*").  Learnt, never
+        assumed; both barely change, so they anchor the decode."""
+        recs = []
+        for j in self.out.glob("*.json"):
+            try:
+                r = json.loads(j.read_text())
+                m = r.get("meta") or {}
+                if m.get("phasing") and m.get("clock_ppm") is not None and abs(m["clock_ppm"]) < 1000:
+                    recs.append((j.stat().st_mtime, (r.get("product") or {}).get("short"),
+                                 float(m["clock_ppm"]), float(m.get("afc_hz") or 0.0)))
+            except Exception:
+                continue
+        learnt: dict = {}
+        for _, short, c, a in sorted(recs):
+            for k in ("*", short):
+                if k:
+                    d = learnt.setdefault(k, {"clock": [], "afc": []})
+                    d["clock"] = (d["clock"] + [c])[-self.CLOCK_KEEP:]
+                    d["afc"] = (d["afc"] + [a])[-self.CLOCK_KEEP:]
+        return learnt
+
+    def _learn(self, short, m):
+        """Learn only from what a chart measured itself: its period from
+        accepted phasing (never one the learnt clock imposed).  If the
+        phasing keeps disagreeing with the learnt clock but agrees with
+        itself, the clock really has changed (new sound card, other cable):
+        adopt it."""
+        if not m.get("phasing") or m.get("clock_ppm") is None or abs(m["clock_ppm"]) >= 1000:
+            return
+        if m.get("period_from_phasing", True):
+            for k in ("*", short):
+                if k:
+                    d = self.learnt.setdefault(k, {"clock": [], "afc": []})
+                    d["clock"] = (d["clock"] + [float(m["clock_ppm"])])[-self.CLOCK_KEEP:]
+                    d["afc"] = (d["afc"] + [float(m.get("afc_hz") or 0.0)])[-self.CLOCK_KEEP:]
+                    d["rejected"] = []
+            return
+        if m.get("phasing_ppm") is None:
+            return
+        key = short if short in self.learnt else "*"
+        d = self.learnt.setdefault(key, {"clock": [], "afc": []})
+        rj = d["rejected"] = (d.get("rejected", []) + [float(m["phasing_ppm"])])[-5:]
+        if len(rj) == 5:
+            med = sorted(rj)[2]
+            if max(abs(r - med) for r in rj) <= 30:
+                log.info("clock: the last 5 %s charts' phasing all say %+.0f ppm, not the learnt %+.0f - "
+                         "the clock has changed, learning the new value", key, med, self._hint("clock", short) or 0)
+                d["clock"] = rj[:]
+                d["rejected"] = []
+
+    def _hint(self, what, short=None):
+        """Median for this station (5+ charts), else for all stations, else None."""
+        for k in (short, "*"):
+            v = (self.learnt.get(k) or {}).get(what, []) if k else []
+            if len(v) >= 5:
+                v = sorted(v)
+                return v[len(v) // 2]
+        return None
+
+    def _reference(self, product):
+        """The raw picture of the last good copy of this chart (its station
+        copy's source), used to check where the frame should be; None if
+        there is none yet or it was not a verified good copy."""
+        if not product or not product.get("slot") or not product.get("contents"):
+            return None
+        try:
+            png, info = station_paths(self.out, product)
+            st = json.loads(info.read_text())
+            if st.get("verified") is not True:
+                return None     # only a copy that passed every check (older copies may be misframed)
+            rec = json.loads((self.out / f"{st['fax']}.json").read_text())
+            if (rec.get("meta") or {}).get("align") == "uncertain":
+                return None
+            img = cv2.imread(str(self.out / rec["files"]["raw"]), cv2.IMREAD_GRAYSCALE)
+            return None if img is None else img.astype(np.float32) / 255.0
+        except Exception:
+            return None
+
+    PUBLISH_MIN_QUALITY = 0.5
+    CHECK_PPM = 15.0      # line period this close to the station's learnt clock (measured spread
+                          # is +/-2 ppm; 15 ppm is about 25 px of shear over a whole chart)
+    CHECK_HZ = 80.0       # tuning offset this close to its learnt offset
+
+    def _publish_check(self, m: dict, short) -> list:
+        """Reasons not to publish this chart ([] = publish).  Every check is
+        independent of how the decode reached its answer."""
+        why = []
+        if not m.get("align_ok", True):
+            why.append("framing not confirmed (" + ", ".join(f"{k} {v}" for k, v in
+                                                          (m.get("align_votes") or {}).items()) + ")")
+        ch = self.clock_hint(short)
+        if ch is not None and m.get("clock_ppm") is not None and abs(m["clock_ppm"] - ch) > self.CHECK_PPM:
+            why.append(f"slant: clock {m['clock_ppm']:+.0f} ppm, station usually {ch:+.0f}")
+        ah = self.afc_hint(short)
+        if ah is not None and m.get("afc_hz") is not None and abs(m["afc_hz"] - ah) > self.CHECK_HZ:
+            why.append(f"tuning: {m['afc_hz']:+.0f} Hz, station usually {ah:+.0f}")
+        if m.get("tears") and not m.get("gaps_filled_ms"):
+            why.append("tear corrected without lost audio")
+        if float(m.get("quality", 0)) < self.PUBLISH_MIN_QUALITY:
+            why.append(f"quality {float(m.get('quality', 0)):.0%}")
+        return why
+
+    def clock_hint(self, short=None):
+        return self._hint("clock", short)
+
+    def afc_hint(self, short=None):
+        return self._hint("afc", short)
 
     def submit(self, audio, fs, meta):
         self.busy += 1
@@ -257,20 +378,33 @@ class Processor:
         t0 = time.time()
         a = self.args
         timeline = meta.pop("timeline", None)     # flywheel data, not saved
+        # which chart this is, first: the station's own clock and offset, and
+        # the last good copy of the same chart, anchor the decode
+        t_start = parse_utc(meta.get("utc") or "")
+        t_end = t_start + timedelta(seconds=len(audio) / fs) if t_start is not None else None
+        product = identify(self.sched, self.cat, self.hub.settings.get("station"), meta.get("utc"),
+                           getattr(self, "auto", None), end=t_end, mid=meta.get("trigger") == "picture")
+        short = (product or {}).get("short")
         res = decode.decode_recording(audio, fs, ioc=a.ioc or meta.get("ioc"), lpm=a.lpm,
-                                      align=a.align, log=log.info, timeline=timeline)
+                                      align=a.align, log=log.info, timeline=timeline,
+                                      clock_hint_ppm=self.clock_hint(short), afc_hint_hz=self.afc_hint(short),
+                                      reference=self._reference(product))
+        self._learn(short, res["meta"])
         if res["meta"].get("afc_score", 99) < NO_SIGNAL_SCORE and not meta.get("name"):
             # no fax tones anywhere in the audio: a false trigger on noise
             log.info("no fax signal in this recording (score %.1f) - not saved", res["meta"]["afc_score"])
             return
+        rm = res["meta"]
+        if not (rm.get("start_tone") or rm.get("phasing") or rm.get("stop_tone")) \
+                and rm.get("align") == "uncertain" and not meta.get("name"):
+            # no start tone, phasing or stop tone, and no line structure in the
+            # picture either: noise or another kind of signal, not a chart
+            log.info("no fax structure in this recording (no tones, no phasing, no line seam; quality %.2f) "
+                     "- not saved", rm.get("quality", 0))
+            return
         img, conf = res["image"], res["conf"]
         enh, einfo = enhance.enhance(img, conf, scale=a.scale, use_ml=not a.no_ml,
-                                     mode=a.mode, log=log.info)
-        t_start = parse_utc(meta.get("utc") or "")
-        t_end = t_start + timedelta(seconds=float(res["meta"].get("duration_s") or 0)) \
-            if t_start is not None and res["meta"].get("duration_s") else None
-        product = identify(self.sched, self.cat, self.hub.settings.get("station"), meta.get("utc"),
-                           getattr(self, "auto", None), end=t_end)
+                                     mode=a.mode, log=log.info, find_tears_again=False)
         if product:
             log.info("chart: %s", describe(product))
         if meta.get("name"):
@@ -305,7 +439,9 @@ class Processor:
             (self.out / "audio").mkdir(exist_ok=True)
             wavfile.write(str(self.out / "audio" / f"{stem}.wav"), int(round(fs)),
                           (np.clip(audio / (np.max(np.abs(audio)) + 1e-12), -1, 1) * 32000).astype(np.int16))
+        review = self._publish_check(res["meta"], short)
         rec = {"id": stem, "utc": meta.get("utc"), "trigger": meta.get("trigger"),
+               "verified": not review, "review": review,
                "end_reason": meta.get("end_reason"), "product": product,
                "audio_overflows": meta.get("audio_overflows", 0),
                "files": {"raw": raw_f, "enhanced": enh_f, "thumb": th_f},
@@ -316,19 +452,31 @@ class Processor:
         tmp.write_text(json.dumps(rec, indent=1, default=float))
         os.replace(tmp, self.out / f"{stem}.json")
         log.info("saved %s  (%d x %d, %.1f s)", self.out / enh_f, e8.shape[1], e8.shape[0], time.time() - t0)
-        try:
-            keep_station_copy(self.out, product, e8, float(res["meta"].get("quality", 0)),
-                              meta.get("utc", ""), stem)
-        except Exception as e:
-            log.info("station copy failed: %s", e)
+        if review:
+            # kept in the gallery for you to see, but not published: the station
+            # copy (what the website takes) is left as it was, and the chart
+            # counts as not collected so a repeat is tried
+            log.info("NOT PUBLISHED (%s) - station copy unchanged", "; ".join(review))
+        else:
+            try:
+                keep_station_copy(self.out, product, e8, float(res["meta"].get("quality", 0)),
+                                  meta.get("utc", ""), stem)
+            except Exception as e:
+                log.info("station copy failed: %s", e)
         self.hub.publish("fax", {"id": stem})
         lengths = getattr(self, "lengths", None)
         end_ts = meta.get("chart_end_ts")
         if lengths is not None and end_ts and product and product.get("slot") \
-                and str(meta.get("end_reason", "")).startswith(CLEAN_ENDS):
+                and str(meta.get("end_reason", "")).startswith(CLEAN_ENDS) \
+                and meta.get("trigger") in ("start tone", "phasing"):
+            # only a recording that began at the chart's start measures its
+            # length (a tail found by the picture check taught "2.4 min")
             lengths.learn(product["short"], product["slot"], datetime.fromtimestamp(end_ts, timezone.utc))
         if getattr(self, "auto", None) is not None:
-            self.auto.on_fax(product, dict(res["meta"], snr_db=meta.get("snr_db")), meta.get("utc", ""))
+            fm = dict(res["meta"], snr_db=meta.get("snr_db"))
+            if review:
+                fm["quality"] = min(float(fm.get("quality", 0)), 0.59)   # not a collected copy
+            self.auto.on_fax(product, fm, meta.get("utc", ""))
 
 
 def station_info(sched, cat, station, s, auto=None) -> dict:
@@ -521,6 +669,11 @@ def main():
         log.info("audio: using %s (%s) chosen on the page", saved_audio.get("name"), saved_audio.get("api"))
 
     def status_cb(s):
+        try:        # the picture check needs this installation's usual tuning offset
+            if cap.detector is not None:
+                cap.detector.afc_usual = proc.afc_hint()
+        except NameError:
+            pass    # capture not set up yet
         if s.get("state") == "idle" and proc.busy:
             s = dict(s, state="decoding")
         s = dict(s, **station_info(sched, cat, hub.settings.get("station"), s, auto))
@@ -540,17 +693,18 @@ def main():
         # so the picture check never reaches back into the previous frequency
         _tune = cat.tune
 
-        def tune_and_mark(khz, usb=True, _retry=0):
+        def tune_and_mark(khz, usb=True, _retry=0, **kw):
             if cap.detector is not None:
                 cap.detector.retuned()
-            return _tune(khz, usb, _retry)
+            return _tune(khz, usb, _retry, **kw)
         cat.tune = tune_and_mark
 
     def set_deadline(det):
         """Once a recording has started: when should this chart be over?"""
         meta = dict(det.rec_meta)
         rec_id = meta.get("t0_samples")
-        p = identify(sched, cat, hub.settings.get("station"), meta.get("utc"), auto)
+        p = identify(sched, cat, hub.settings.get("station"), meta.get("utc"), auto,
+                     mid=meta.get("trigger") == "picture")
         if not (p and p.get("slot")):
             return rec_id
         dl = lengths.deadline(sched, p["short"], p["slot"], parse_utc(meta["utc"]))
@@ -560,6 +714,15 @@ def main():
         if when.timestamp() < time.time() + 60:
             # already (nearly) over: the chart was misidentified, or this is a
             # late repeat - never cut a recording that has only just begun
+            if meta.get("trigger") == "picture" and det.state == "receiving" \
+                    and det.rec_meta.get("t0_samples") == rec_id:
+                # found by the picture check alone, after its chart's time: never
+                # let it run on unchecked (a 32 min recording blocked the plan)
+                lim = time.time() + PICTURE_LATE_MAX_S
+                det.deadline = (lim, None, f"{p['short']} {p['slot']}Z, picture found late")
+                log.info("receiving %s %sZ: its expected end has passed - closing within %d min at the latest",
+                         p["short"], p["slot"], PICTURE_LATE_MAX_S // 60)
+                return rec_id
             log.info("receiving %s %sZ: its expected end has passed - no length limit for this one",
                      p["short"], p["slot"])
             return rec_id

@@ -19,6 +19,7 @@ Builds a rolling plan of which station/frequency to tune to and when:
 """
 from __future__ import annotations
 
+import collections
 import json
 import os
 import math
@@ -122,6 +123,30 @@ DX_BACKOFF_MAX_DAYS = 7   # longest pause for a DX frequency/time block after fa
 DX_MIN_PRIOR = 0.10       # below this the propagation model calls a DX path hopeless
 DX_GIVE_UP_S = 240        # silent DX probe: abandoned this long after its slot start ...
 DX_GIVE_UP_SNR = 0.0      # ... if the SNR has stayed below this (dB) and nothing was received
+SCAN = True              # before a chart sent on several frequencies, compare them on air
+SCAN_SETTLE_S = 1.2      # after SDR Console confirms a frequency: audio and SNR settle ...
+SCAN_MEASURE_S = 4.0     # ... then the SNR is read for this long
+SCAN_DONE_BEFORE_S = 10  # the scan ends this long before the slot, back on the chosen frequency
+SCAN_SWITCH_DB = 3.0     # another frequency must be this much better than the planned one
+SCAN_MIN_SNR = 3.0       # below this on every frequency: nothing on air yet - keep the plan, log nothing
+# Back-to-back charts (Northwood every 12 minutes) leave no signal before the
+# next chart to compare.  Then the comparison is made during the chart's own
+# start tone and phasing lines (~35 s, sent identically on every frequency):
+SCAN_PHASING = False     # off: the receiver stays put from the start tone to the picture.  Retuning
+                         # during the phasing damaged it and gave wrong line periods; the pre-chart
+                         # scan, the learning and the off-air hunt choose the frequency instead
+PH_WAIT_S = 3.5          # after the start tone triggers the recording: let it finish
+PH_MEASURE_S = 2.5       # SNR read for this long on each frequency
+PH_SETTLE_S = 1.0        # after SDR Console confirms a frequency
+PH_BUDGET_S = 25.0       # all done (back on the chosen frequency) this long after the trigger
+PH_PHASING_WAIT_S = 0.5  # recording triggered by the phasing itself (start tone missed): it is
+PH_PHASING_BUDGET_S = 17.0  # already ~8 s into the ~30 s of phasing - less time, fewer frequencies
+# Nothing heard after the start time: the planned frequency may be off air
+# (or faded) while the chart goes out on the station's others.
+OFFAIR_WAIT_S = 20       # this long after the slot start with no recording ...
+OFFAIR_QUIET_S = 10      # ... and the SNR below OFFAIR_SNR for this long ...
+OFFAIR_SNR = 0.0
+OFFAIR_LATEST_S = 120    # ... (not later than this after the start) - try the other frequencies
 AUDIO_SUSPECT_SNR = 5.0   # a slot with a signal this strong (dB) but no fax decoded is suspicious ...
 AUDIO_FAULT_COUNT = 3     # ... this many in a row with no decode in between = the audio path is broken
 AUDIO_OK_QUALITY = 0.2   # any decode at least this good shows the audio path works
@@ -326,6 +351,12 @@ class PropLog:
         when = datetime.fromisoformat(r["utc"].replace("Z", "+00:00"))
         k = (r["short"], float(r["khz"]), hour_bucket(when))
         st = self.stats.setdefault(k, {"hist": [], "fails_in_row": 0, "last": 0.0, "last_ok": 0.0})
+        if r.get("kind") == "scan":
+            # SNR of the signal on air just before a chart, read on each of its
+            # frequencies: evidence about the channel, not a decode attempt
+            if r.get("snr_db") is not None:
+                st["scan"] = (st.get("scan", []) + [(when.timestamp(), float(r["snr_db"]))])[-60:]
+            return
         q = float(r.get("quality") or 0.0)
         kind = r.get("kind")
         # a priority-station chart received off-plan is judged like a planned one
@@ -375,6 +406,8 @@ class PropLog:
             qs += w * q
             if s is not None and at - ts < 2 * HALF_LIFE_DAYS * 86400:
                 snr.append(s)
+        # pre-chart scans add SNR readings (no decode result)
+        snr += [s for ts, s in st.get("scan", []) if at - ts < 2 * HALF_LIFE_DAYS * 86400]
         return {"n": n, "ok": ok, "qmean": qs / n if n else None,
                 "snr_med": sorted(snr)[len(snr) // 2] if len(snr) >= 2 else None}
 
@@ -436,8 +469,8 @@ class PropLog:
             w = self.weighted(st, when.timestamp())
             if w["n"] >= 1.5:
                 v += 0.25 * (w["qmean"] - 0.5)
-                if w["snr_med"] is not None:
-                    v += 0.03 * max(-10.0, min(20.0, w["snr_med"]))
+            if w["snr_med"] is not None:      # from decodes and pre-chart scans
+                v += 0.03 * max(-10.0, min(20.0, w["snr_med"]))
             # a run of recent failures outweighs a long good history: react
             # within days when a frequency stops working
             if st["fails_in_row"] >= 2:
@@ -453,7 +486,7 @@ class PropLog:
         for (short, khz, hb), st in sorted(self.stats.items()):
             w = self.weighted(st, now.timestamp())
             out.append({"station": short, "khz": khz, "hours": f"{hb * 3:02d}-{hb * 3 + 3:02d}Z",
-                        "attempts": len(st["hist"]), "weight": round(w["n"], 1), "good": round(w["ok"], 1),
+                        "attempts": len(st["hist"]), "scans": len(st.get("scan", [])), "weight": round(w["n"], 1), "good": round(w["ok"], 1),
                         "avg_quality": None if w["qmean"] is None else round(w["qmean"], 2),
                         "snr_db": w["snr_med"],
                         "last_tried": datetime.fromtimestamp(st["last"], timezone.utc).strftime("%Y-%m-%d"),
@@ -483,6 +516,7 @@ class Item:
     snr: list = field(default_factory=list)
     result: dict | None = None
     close_t: float = 0.0
+    alts: list = field(default_factory=list)   # every frequency the slot is sent on
 
     @property
     def dial(self) -> float:
@@ -608,7 +642,7 @@ class Planner:
                 khz, p = self._best_freq(st.short, khzs, start, explore=imp < 20 and not retry)
                 cands.append(Item(start, end, st.short, st.name, sl.hhmm, contents, valid, khz, "core",
                                   self.core[st.short] + imp * 10 + 50 * p - 25 * n + (RETRY_BONUS if retry else 0),
-                                  key))
+                                  key, alts=list(khzs)))
         chosen = self._select(cands, [b for b in busy if b.kind == "core"])
         if not self.dx:
             return chosen
@@ -636,7 +670,7 @@ class Planner:
                     continue
                 key = f"{chart_key(st.short, sl.contents, sl.valid)}|{start.date()}"
                 dx.append(Item(start, end, st.short, st.name, sl.hhmm, sl.contents, sl.valid, khz, "dx",
-                               100 * p + imp, key))
+                               100 * p + imp, key, alts=list(elig)))
         return self._select(dx, chosen + [b for b in busy if b.kind != "core"])
 
     @staticmethod
@@ -700,6 +734,9 @@ class AutoScheduler:
         # audio-path check: failures held back while it is unclear whether the
         # radio audio reaching the decoder is sound (see _log_item)
         self.held: list[tuple[dict, bool, float]] = []
+        self.scanning = False          # comparing a chart's frequencies on air (see _scan)
+        self._snr_recent = collections.deque(maxlen=120)   # (time, SNR) from the status feed
+        self._scan_snr: list | None = None
         self.audio_fault = False
         self._last_plan = 0.0
         self._lock = threading.Lock()
@@ -773,12 +810,18 @@ class AutoScheduler:
 
     # -------- feeds from the decoder
     def on_status(self, s: dict):
+        was = self.receiving
         self.receiving = s.get("state") == "receiving"
+        if self.receiving and not was and s.get("trigger") in ("start tone", "phasing"):
+            self._maybe_phasing_scan(s.get("trigger"))
         self.rec_elapsed = float(s.get("elapsed") or 0) if self.receiving else 0.0
         # when the recording in progress started (PC clock)
         self.rec_start_ts = time.time() - self.rec_elapsed if self.receiving else None
         if s.get("snr_db") is not None:
             self.last_snr = float(s["snr_db"])
+            self._snr_recent.append((time.time(), self.last_snr))
+            if self._scan_snr is not None:
+                self._scan_snr.append(self.last_snr)
 
     def on_fax(self, product: dict | None, meta: dict, utc: str):
         """A fax was decoded: attach the result to the matching plan item."""
@@ -861,6 +904,17 @@ class AutoScheduler:
                     self._log_item(it, it.result["quality"] if it.result else 0.0)
         if not self.enabled or time.time() < self.paused_until or self.cat is None or not self.cat.enabled:
             return
+        if self.scanning:
+            return                                   # the scan thread has the receiver
+        cur = self.current
+        if (cur is not None and cur.state == "tuned" and not self.receiving and SCAN
+                and len(set(cur.alts)) >= 2 and not getattr(cur, "hunted", False)
+                and cur.start + timedelta(seconds=OFFAIR_WAIT_S) <= now
+                <= cur.start + timedelta(seconds=OFFAIR_LATEST_S) and self._quiet()):
+            cur.hunted = True
+            self.scanning = True
+            threading.Thread(target=self._offair_hunt, args=(cur,), daemon=True).start()
+            return
         # next item due
         due = next((i for i in items if i.state == "planned"
                     and i.start - timedelta(seconds=LEAD_S) <= now < i.end), None)
@@ -898,9 +952,15 @@ class AutoScheduler:
                     return
                 self.current.abandoned = True
             self._close(self.current)
-        self.cat.tune(due.dial)
         due.state = "tuned"
         self.current = due
+        if self._scan_list(due, now):
+            self.scanning = True
+            self.logf(f"auto: {due.start:%H:%M}Z {due.short} - {due.contents} [{due.kind}]: comparing "
+                      f"{', '.join(f'{k:g}' for k in self._scan_list(due, now))} kHz on air first")
+            threading.Thread(target=self._scan, args=(due,), daemon=True).start()
+            return
+        self.cat.tune(due.dial)
         self.logf(f"auto: {due.start:%H:%M}Z {due.short} {due.khz} kHz (dial {due.dial}) - {due.contents}"
                   f" [{due.kind}]")
 
@@ -945,6 +1005,218 @@ class AutoScheduler:
         verdict = "good" if quality >= (GOOD_QUALITY if it.kind == "core" else DX_GOOD_QUALITY) else "poor/none"
         self.logf(f"auto: logged {it.short} {it.khz} kHz {it.slot}Z  SNR "
                   f"{'--' if snr is None else f'{snr:+.0f} dB'}  quality {quality:.2f} ({verdict})")
+
+    # -------- pre-chart frequency scan
+    # Northwood, DWD and others send the same chart on several frequencies at
+    # once, and keep a signal on air between charts (the previous chart, or a
+    # steady carrier).  Before the chart starts, each frequency is tuned in
+    # turn and its SNR read; the chart is then received on the best one.  The
+    # readings go into the learning log as SNR-only evidence ("scan").
+    def _scan_list(self, it: Item, now: datetime) -> list[float]:
+        """The frequencies to compare (best expected first), as many as fit
+        before the slot; [] if there is nothing to compare or no time."""
+        if not SCAN or len(set(it.alts)) < 2:
+            return []
+        per = SCAN_SETTLE_S + SCAN_MEASURE_S + 1.5          # + CAT poll and confirmation
+        room = (it.start - now).total_seconds() - SCAN_DONE_BEFORE_S - 3.0   # - final retune
+        n = int(room // per)
+        if n < 2:
+            return []
+        order = sorted(set(it.alts), key=lambda k: -self.proplog.value(self.qth, it.short, k, it.start))
+        if it.khz in order:                                   # the planned one always gets measured
+            order.remove(it.khz)
+            order.insert(0, it.khz)
+        return order[:n]
+
+    def _scan(self, it: Item):
+        try:
+            self._scan_run(it)
+        except Exception as e:
+            self.logf(f"auto: frequency scan failed ({e}) - receiving on {it.khz} kHz")
+            self.cat.tune(it.dial)
+        finally:
+            self._scan_snr = None
+            self.scanning = False
+
+    def _scan_run(self, it: Item):
+        freqs = self._scan_list(it, self.clock())
+        planned = it.khz
+        res = {}
+        for khz in freqs:
+            if self.receiving or not self.enabled:
+                break                     # a chart started (or AUTO switched off): stay put
+            dial = round(khz - DIAL_OFFSET_KHZ, 2)
+            self.cat.tune(dial, hop=False)
+            if hasattr(self.cat, "wait_for") and not self.cat.wait_for(dial, timeout=3.0):
+                continue
+            time.sleep(SCAN_SETTLE_S)
+            self._scan_snr = []
+            time.sleep(SCAN_MEASURE_S)
+            v, self._scan_snr = self._scan_snr, None
+            if v:
+                res[khz] = sorted(v)[len(v) // 2]
+        if self.receiving:
+            # recording on the frequency it is on now: that is where the chart is
+            cur = self.cat.dial_khz_at() if hasattr(self.cat, "dial_khz_at") else None
+            if cur is not None:
+                it.khz = min(it.alts, key=lambda k: abs(k - DIAL_OFFSET_KHZ - cur))
+            self.logf(f"auto: scan stopped - reception started on {it.khz} kHz")
+            return
+        txt = ", ".join(f"{k:g} {s:+.0f} dB" for k, s in res.items())
+        best = max(res, key=res.get) if res else planned
+        if not res or res[best] < SCAN_MIN_SNR:
+            self.logf(f"auto: scan {it.short} {it.slot}Z: {txt or 'no readings'} - nothing on air yet, "
+                      f"keeping {planned} kHz")
+        else:
+            if best != planned and res[best] < res.get(planned, -99) + SCAN_SWITCH_DB:
+                best = planned            # not clearly better than the planned frequency
+            it.khz = best
+            it.scan_done = True           # compared on air: no need to repeat during the phasing
+            self.logf(f"auto: scan {it.short} {it.slot}Z: {txt} -> {best} kHz"
+                      f"{'' if best == planned else f' (planned {planned})'}")
+            for khz, snr in res.items():
+                self.proplog.add({"utc": it.start.strftime("%Y-%m-%dT%H:%M:%SZ"), "short": it.short,
+                                  "khz": khz, "slot": it.slot, "snr_db": round(snr, 1), "quality": None,
+                                  "key": None, "kind": "scan", "hour": it.start.hour})
+        if self.current is it and it.state == "tuned":
+            self.cat.tune(it.dial)
+            self.logf(f"auto: {it.start:%H:%M}Z {it.short} {it.khz} kHz (dial {it.dial}) - {it.contents}"
+                      f" [{it.kind}]")
+
+    def _maybe_phasing_scan(self, trigger: str = "start tone"):
+        it = self.current
+        if not (SCAN and SCAN_PHASING and self.enabled and not self.scanning and it is not None
+                and it.state == "tuned" and len(set(it.alts)) >= 2 and not getattr(it, "scan_done", False)
+                and self.cat is not None and self.cat.enabled):
+            return
+        now = self.clock()
+        if not (it.start - timedelta(seconds=60) <= now <= it.start + timedelta(seconds=120)):
+            return                       # not this item's chart starting
+        it.scan_done = True
+        self.scanning = True
+        threading.Thread(target=self._phasing_scan, args=(it, trigger), daemon=True).start()
+
+    def _phasing_scan(self, it: Item, trigger: str = "start tone"):
+        try:
+            self._phasing_scan_run(it, trigger)
+        except Exception as e:
+            self.logf(f"auto: phasing scan failed ({e}) - staying on {it.khz} kHz")
+            try:
+                self.cat.tune(it.dial, hop=False)
+            except Exception:
+                pass
+        finally:
+            self._scan_snr = None
+            self.scanning = False
+
+    def _measure(self, seconds: float):
+        self._scan_snr = []
+        time.sleep(seconds)
+        v, self._scan_snr = self._scan_snr, None
+        return sorted(v)[len(v) // 2] if v else None
+
+    def _phasing_scan_run(self, it: Item, trigger: str = "start tone"):
+        """The chart has just started on it.khz (start tone heard).  Read the
+        SNR of its phasing lines here and on its other frequencies, then go
+        to the best one before the picture starts.  No centring hop - the
+        recording is running."""
+        t0 = time.time()
+        wait, budget = (PH_WAIT_S, PH_BUDGET_S) if trigger == "start tone" else \
+            (PH_PHASING_WAIT_S, PH_PHASING_BUDGET_S)
+        planned = it.khz
+        others = sorted((k for k in set(it.alts) if k != planned),
+                        key=lambda k: -self.proplog.value(self.qth, it.short, k, it.start))
+        self.logf(f"auto: {it.short} {it.slot}Z chart starting ({trigger}) - comparing "
+                  f"{', '.join(f'{k:g}' for k in [planned] + others)} kHz during its phasing")
+        time.sleep(wait)
+        res = {}
+        snr = self._measure(PH_MEASURE_S)
+        if snr is not None:
+            res[planned] = snr
+        per = PH_SETTLE_S + PH_MEASURE_S + 1.5
+        for khz in others:
+            if not self.receiving or time.time() - t0 + per + 2.0 > budget:
+                break
+            dial = round(khz - DIAL_OFFSET_KHZ, 2)
+            self.cat.tune(dial, hop=False)
+            if hasattr(self.cat, "wait_for") and not self.cat.wait_for(dial, timeout=2.5):
+                continue
+            time.sleep(PH_SETTLE_S)
+            snr = self._measure(PH_MEASURE_S)
+            if snr is not None:
+                res[khz] = snr
+        txt = ", ".join(f"{k:g} {v:+.0f} dB" for k, v in res.items())
+        best = max(res, key=res.get) if res else planned
+        if best != planned and res[best] < res.get(planned, -99) + SCAN_SWITCH_DB:
+            best = planned
+        it.khz = best
+        if res and res[best] >= SCAN_MIN_SNR:
+            for khz, v in res.items():
+                self.proplog.add({"utc": it.start.strftime("%Y-%m-%dT%H:%M:%SZ"), "short": it.short,
+                                  "khz": khz, "slot": it.slot, "snr_db": round(v, 1), "quality": None,
+                                  "key": None, "kind": "scan", "hour": it.start.hour})
+        self.cat.tune(it.dial, hop=False)
+        self.logf(f"auto: phasing scan {it.short} {it.slot}Z: {txt or 'no readings'} -> {best} kHz"
+                  f"{'' if best == planned else f' (planned {planned})'} after {time.time() - t0:.0f} s")
+
+    def _quiet(self) -> bool:
+        """Nothing on the tuned frequency for the last OFFAIR_QUIET_S."""
+        t = time.time()
+        v = [snr for ts, snr in self._snr_recent if t - ts <= OFFAIR_QUIET_S]
+        return len(v) >= OFFAIR_QUIET_S * 0.6 and sorted(v)[len(v) // 2] < OFFAIR_SNR and max(v) < SCAN_MIN_SNR
+
+    def _offair_hunt(self, it: Item):
+        try:
+            self._offair_hunt_run(it)
+        except Exception as e:
+            self.logf(f"auto: frequency hunt failed ({e}) - back on {it.khz} kHz")
+            try:
+                self.cat.tune(it.dial, hop=False)
+            except Exception:
+                pass
+        finally:
+            self._scan_snr = None
+            self.scanning = False
+
+    def _offair_hunt_run(self, it: Item):
+        """The chart should have started but nothing is heard on it.khz: look
+        for it on the slot's other frequencies and stay on the best one.  Its
+        start tone and phasing are missed, so the picture check picks the
+        chart up on the new frequency."""
+        planned = it.khz
+        v = [snr for ts, snr in self._snr_recent if time.time() - ts <= OFFAIR_QUIET_S]
+        res = {planned: sorted(v)[len(v) // 2]} if v else {}
+        others = sorted((k for k in set(it.alts) if k != planned),
+                        key=lambda k: -self.proplog.value(self.qth, it.short, k, it.start))
+        self.logf(f"auto: nothing heard on {it.short} {planned:g} kHz {OFFAIR_WAIT_S} s after {it.slot}Z - "
+                  f"trying {', '.join(f'{k:g}' for k in others)} kHz")
+        for khz in others:
+            if self.receiving or not self.enabled or self.current is not it:
+                break
+            dial = round(khz - DIAL_OFFSET_KHZ, 2)
+            self.cat.tune(dial, hop=False)
+            if hasattr(self.cat, "wait_for") and not self.cat.wait_for(dial, timeout=2.5):
+                continue
+            time.sleep(PH_SETTLE_S)
+            snr = self._measure(PH_MEASURE_S)
+            if snr is not None:
+                res[khz] = snr
+        txt = ", ".join(f"{k:g} {v:+.0f} dB" for k, v in res.items())
+        it.scan_done = True               # just compared: the phasing scan must not repeat it
+        best = max(res, key=res.get) if res else planned
+        if res.get(best, -99) < SCAN_MIN_SNR:
+            best = planned                # nowhere better: the chart is probably not being sent
+        it.khz = best
+        if res and res.get(best, -99) >= SCAN_MIN_SNR:
+            for khz, val in res.items():
+                self.proplog.add({"utc": it.start.strftime("%Y-%m-%dT%H:%M:%SZ"), "short": it.short,
+                                  "khz": khz, "slot": it.slot, "snr_db": round(val, 1), "quality": None,
+                                  "key": None, "kind": "scan", "hour": it.start.hour})
+        if self.current is it:
+            self.cat.tune(it.dial, hop=False)
+        self.logf(f"auto: hunt {it.short} {it.slot}Z: {txt or 'no readings'} -> "
+                  + (f"{best} kHz (planned {planned} silent)" if best != planned
+                     else f"nothing better, back on {planned} kHz"))
 
     # -------- audio-path check
     # A strong signal with no fax decoded, slot after slot, says the audio

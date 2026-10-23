@@ -279,7 +279,8 @@ function show(f) {
   $('meta').textContent = [prTxt, fmtUTC(f.utc), `IOC ${m.ioc}`, `${m.lpm} LPM`,
     `AFC ${m.afc_hz > 0 ? '+' : ''}${m.afc_hz} Hz`, `clock ${m.clock_ppm > 0 ? '+' : ''}${m.clock_ppm} ppm`,
     `${m.lines} lines`, `quality ${Math.round((m.quality || 0) * 100)}%`,
-    f.enhance ? f.enhance.mode : ''].join('  ·  ');
+    f.enhance ? f.enhance.mode : '',
+    f.review && f.review.length ? 'NOT PUBLISHED: ' + f.review.join('; ') : ''].filter(Boolean).join('  ·  ');
   document.querySelectorAll('.thumb').forEach(t => t.classList.toggle('sel', t.dataset.id === f.id));
 }
 // ---- thumbnail strip: one UTC day at a time, newest at the top ----

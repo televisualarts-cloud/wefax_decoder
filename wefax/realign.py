@@ -72,15 +72,21 @@ def _hint_fixes(ink, hints):
     return fixes
 
 
-def find_tears(img: np.ndarray, hints=()):
+def find_tears(img: np.ndarray, hints=(), blind=True):
     """Return [(row, shift_px), ...]; shift > 0 means content below moved right.
 
     hints: rows where lost audio was filled (flywheel) - checked first with a
     narrow, more sensitive search; then the whole image is searched blind.
+    blind=False: only the hinted rows.  For a live recording the flywheel
+    sees every lost sample, so a "tear" anywhere else is the chart's own
+    layout changing (an ice chart's header giving way to map and legend
+    looked like a 682 px jump) and must not be "corrected".
     """
     ink = _prep(img.astype(np.float32))
     K, W = ink.shape
     pre = _hint_fixes(ink, hints) if len(hints) else []
+    if not blind:
+        return pre
     if pre:
         ink = apply_tears(ink, pre)
     nb = K // B

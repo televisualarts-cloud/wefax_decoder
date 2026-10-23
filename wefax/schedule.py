@@ -166,9 +166,21 @@ class Schedules:
         return None if best is None else best[1:]
 
     @staticmethod
-    def match_slot(slots, when: datetime, early_s: int = 120, late_s: int = 300):
-        """Slot whose start is closest to `when` (start tone / phasing time)."""
+    def match_slot(slots, when: datetime, early_s: int = 120, late_s: int = 300, mid: bool = False):
+        """Slot whose start is closest to `when` (start tone / phasing time).
+        mid=True: the recording began part-way through a chart (found by the
+        picture check), so the chart is the latest one that had started by
+        then - not a later slot that happens to be nearer (DWD's 19:00Z chart
+        runs until about 19:15, its tail is not the 19:13Z chart)."""
         t = when.hour * 60 + when.minute + when.second / 60.0
+        if mid:
+            best = None
+            for sl in slots:
+                d = (t - sl.minute + 720) % 1440 - 720      # minutes since the slot's start
+                if -0.5 <= d <= 30 and (best is None or d < best[0]):
+                    best = (d, sl)
+            if best is not None:
+                return best[1]
         best = None
         for sl in slots:
             d = (t - sl.minute + 720) % 1440 - 720          # minutes, wraps midnight
@@ -176,7 +188,8 @@ class Schedules:
                 best = (d, sl)
         return None if best is None else best[1]
 
-    def identify(self, when: datetime, dial_khz: float | None = None, station: str | None = None):
+    def identify(self, when: datetime, dial_khz: float | None = None, station: str | None = None,
+                 mid: bool = False):
         """Return dict(station, short, slot, contents, valid, khz) or None."""
         st = slots = khz = None
         if dial_khz is not None:
@@ -189,7 +202,7 @@ class Schedules:
                 slots = [s for _, g in st.groups for s in g]
         if st is None:
             return None
-        sl = self.match_slot(slots, when)
+        sl = self.match_slot(slots, when, mid=mid)
         out = {"station": st.name, "short": st.short, "khz": khz}
         if sl:
             out.update(slot=sl.hhmm, contents=sl.contents, valid=sl.valid)

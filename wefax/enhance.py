@@ -154,7 +154,7 @@ def destreak(x: np.ndarray, tau: float = 0.18) -> np.ndarray:
 CLEAN_SIGMA = 0.015
 # Paper is shown at this level rather than 100 % white: easier on the eye,
 # and faint marks near white aren't lost on screens that clip early.
-WHITE_LEVEL = 0.92
+WHITE_LEVEL = 0.96
 # background greys lighter than PAPER_KNEE[0] fade smoothly to paper white by
 # PAPER_KNEE[1] (was a hard snap at 0.6, which erased faint or noisy text)
 PAPER_KNEE = (0.62, 0.88)
@@ -234,7 +234,7 @@ def reconstruct_lines(base: np.ndarray, n_angles: int = 24, z0: float = 4.5):
 
 
 def enhance(img: np.ndarray, conf: np.ndarray, scale: int = 2,
-            use_ml: bool = True, mode: str = "auto", log=print):
+            use_ml: bool = True, mode: str = "auto", log=print, find_tears_again: bool = True):
     """Return (enhanced float image, info dict).
 
     mode 'auto' (default): de-streak, then rebuild broken chart lines.
@@ -246,9 +246,12 @@ def enhance(img: np.ndarray, conf: np.ndarray, scale: int = 2,
     info = {}
     u8 = lambda a: (np.clip(a, 0, 1) * 255 + 0.5).astype(np.uint8)
 
-    # 0. tears (already done by the decoder for new faxes; this catches older ones)
+    # 0. tears (already done by the decoder for new faxes; this catches older
+    # ones).  find_tears_again=False for new faxes: the decoder has checked them
+    # against the flywheel's record of lost audio, and a blind search here
+    # mistook an ice chart's layout change for a 682 px tear.
     from .realign import find_tears, apply_tears
-    tears = find_tears(img)
+    tears = find_tears(img) if find_tears_again else []
     if tears:
         img, conf = apply_tears(img, tears), apply_tears(conf, tears)
         info["tears_fixed"] = [[int(r), int(s)] for r, s in tears]

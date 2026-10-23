@@ -154,7 +154,8 @@ class Detector:
                 if self.phase_hits >= 3:
                     self._begin("phasing", None)
                 elif self._image_now():
-                    self._begin_from_lookback()
+                    if self._fax_tones_near_usual():
+                        self._begin_from_lookback()
         else:
             self.rec.append(a)
             self.rec_n += len(a)
@@ -364,6 +365,30 @@ class Detector:
         f = np.concatenate([b[1] for b in list(self.look)[-int(8 / self.BLOCK_S):]])
         self.img_votes.append(line_score(f, self.fs) > self.IMG_SCORE)
         return sum(self.img_votes) >= self.IMG_NEED
+
+    afc_usual: float | None = None   # this installation's usual tuning offset (set by the main program)
+    NOT_FAX_HZ = 80.0                # picture check: tones this far from it, and ...
+    NOT_FAX_RATIO = 1.6              # ... this much stronger than any near it: not a fax
+
+    def _fax_tones_near_usual(self) -> bool:
+        """The picture check sees any signal that repeats regularly.  A fax
+        sits on black/white tones at the receiver's usual offset; another
+        kind of signal that repeats (data, interference) puts its strongest
+        pair elsewhere.  Such a signal is not recorded."""
+        if self.afc_usual is None:
+            return True                     # a new installation: no usual offset known yet
+        a = np.concatenate([b[0] for b in list(self.look)[-80:]])
+        near, sc_near = dsp.psd_comb(a, self.fs, centre=self.afc_usual, search=self.NOT_FAX_HZ)
+        far, sc_far = dsp.psd_comb(a, self.fs, search=300.0)
+        if abs(far - self.afc_usual) > self.NOT_FAX_HZ and sc_far > self.NOT_FAX_RATIO * sc_near:
+            if not getattr(self, "_not_fax_logged", False):
+                self.log(f"[{time.strftime('%H:%M:%S')}] regular signal on air, but its tones are {far:+.0f} Hz "
+                         f"off (fax here is usually {self.afc_usual:+.0f} Hz) - not a fax, not recorded")
+                self._not_fax_logged = True
+            self.img_votes.clear()
+            return False
+        self._not_fax_logged = False
+        return True
 
     def _begin_from_lookback(self):
         look = list(self.look)

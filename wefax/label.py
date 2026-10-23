@@ -1,8 +1,8 @@
 """Title block stamped on the enhanced chart: black text on white, black
 border, top left.
 
-    NORTHWOOD UK | 4610 kHz | 2026-10-14
-    Surface Prognosis T+48 | 12Z run | Quality 70%
+    NORTHWOOD UK | 4610 kHz | 2026-10-14 08:11z
+    Surface Prognosis T+48 | 12z run | Quality 70%
 """
 from __future__ import annotations
 
@@ -42,10 +42,11 @@ def title_lines(product: dict, utc: str, quality: float | None) -> list[str]:
     if product.get("khz"):
         first.append(f"{float(product['khz']):g} kHz")
     if utc:
-        first.append(utc[:10])
+        # date and the time reception started, e.g. 2026-10-18 08:11z
+        first.append(f"{utc[:10]} {utc[11:16]}z" if len(utc) >= 16 else utc[:10])
     second = [str(product.get("contents", "")).strip()]
     if str(product.get("valid") or "").strip():
-        second.append(f"{product['valid']}Z run")
+        second.append(f"{product['valid']}z run")
     if quality is not None:
         second.append(f"Quality {round(100 * float(quality))}%")
     return [" | ".join(first), " | ".join(p for p in second if p)]
