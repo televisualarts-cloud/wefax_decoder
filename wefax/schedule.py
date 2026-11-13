@@ -109,8 +109,9 @@ def _gya_station() -> Station:
                    [({4610.0, 8040.0}, slots), ({2618.5}, night), ({11086.5}, day)])
 
 
-def load(path: Path | None = None) -> list[Station]:
-    """Parse the plugin XML (tolerant of its malformed comments)."""
+def load(path: Path | None = None, updates_dir: Path | None = None) -> list[Station]:
+    """Parse the plugin XML (tolerant of its malformed comments), then apply
+    the changes the monthly NWS check found (updates_dir = the output folder)."""
     candidates = [p for p in (path, Path.cwd() / "WeatherFaxSchedules.xml", DATA) if p]
     src = next((p for p in candidates if p.exists()), None)
     stations: list[Station] = []
@@ -139,12 +140,21 @@ def load(path: Path | None = None) -> list[Station]:
                 stations.append(Station(st.get("Name", "?"), groups))
     stations = [s for s in stations if s.name != "Northwood, United Kingdom"]
     stations.append(_gya_station())
+    if updates_dir is not None:
+        from . import nwscheck
+        stations = nwscheck.apply_updates(stations, nwscheck.load_updates(updates_dir), Slot)
     return stations
 
 
 class Schedules:
-    def __init__(self, path: Path | None = None):
-        self.stations = load(path)
+    def __init__(self, path: Path | None = None, updates_dir: Path | None = None):
+        self.path, self.updates_dir = path, updates_dir
+        self.stations = load(path, updates_dir)
+
+    def reload(self):
+        """Re-read the schedules (after the monthly NWS check changed them).
+        The list is replaced in place so everything holding it sees the change."""
+        self.stations[:] = load(self.path, self.updates_dir)
 
     def station_by_name(self, text: str) -> Station | None:
         t = text.lower()

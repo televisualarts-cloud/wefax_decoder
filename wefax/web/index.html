@@ -109,6 +109,15 @@
     border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer;
     text-decoration: none; }
   button.on { border-color: var(--accent); color: var(--accent); }
+  button:disabled { opacity: .4; cursor: default; }
+  /* view switch: the fax being received now / the one just completed */
+  .seg { display: inline-flex; margin-right: 8px; }
+  .seg button { border-radius: 0; }
+  .seg button:first-child { border-radius: 4px 0 0 4px; }
+  .seg button:last-child { border-radius: 0 4px 4px 0; border-left: none; }
+  .seg button.on { background: #1d2530; }
+  #bLive.on { border-color: var(--rx); color: var(--rx); }
+  #bLive.on.nosig { border-color: var(--busy); color: var(--busy); }
   .meta { font: 14px var(--mono); color: var(--cyan); margin-left: 8px; }
   .viewer { overflow: auto; background: #07090c; position: relative; }
   #stage { position: relative; margin: 0 auto; overflow: hidden; }
@@ -190,6 +199,10 @@
     <span title="What the auto-scheduler will tune, in order">AUTO PLAN</span><span id="nextBig" hidden></span><div class="chips" id="plan"></div>
   </div>
   <div class="toolbar">
+    <span class="seg" role="group" aria-label="View">
+      <button id="bLive" title="Show the fax being received now (or the panel at the top left)">&#9679; Live</button>
+      <button id="bLast" title="Show the fax received most recently">Last received</button>
+    </span>
     <button id="bEnh" class="on">Enhanced</button>
     <button id="bRaw">Raw</button>
     <button id="bFit" class="on">Fit</button>
@@ -233,6 +246,7 @@ function paintLive() {
   else if (liveMode === 'nosig') { cap.hidden = false; cap.innerHTML = `expected: ${slotTxt(s.watch)}`; cap.title = s.watch.contents || ''; }
   else { cap.hidden = true; }
   if (liveSel && liveMode === 'idle') { liveSel = false; show(cur || faxes[0]); }
+  syncSwitch();
 }
 function showLive() {
   if (liveMode === 'idle') return;
@@ -253,6 +267,25 @@ function onLive(info) {
   if (liveSel && !$('live').classList.contains('idle')) showLive();
 }
 $('live').onclick = showLive;
+// the Live / Last received switch follows whatever is on view, however it was chosen
+function syncSwitch() {
+  const idle = liveMode === 'idle';
+  const bl = $('bLive');
+  bl.disabled = idle && !liveSel;
+  bl.title = idle ? 'Nothing is being received at the moment' : 'Show the fax being received now (or click the live panel at the top left)';
+  bl.classList.toggle('on', liveSel);
+  bl.classList.toggle('nosig', liveSel && liveMode !== 'rx');
+  $('bLast').disabled = !faxes.length;
+  $('bLast').classList.toggle('on', !liveSel && !!cur && !!faxes.length && cur.id === faxes[0].id);
+}
+function showLast() {
+  if (!faxes.length) return;
+  if (!isToday()) { dayMs = utcDay(Date.now()); renderGallery(); }
+  $('strip').scrollTop = 0;
+  show(faxes[0]);
+}
+$('bLive').onclick = showLive;
+$('bLast').onclick = showLast;
 $('liveImg').addEventListener('load', () => {
   const im = $('liveImg');
   im.classList.toggle('full', im.offsetHeight > $('live').clientHeight);
@@ -264,7 +297,7 @@ function show(f) {
   liveSel = false;
   $('live').classList.remove('sel');
   cur = f;
-  if (!f) return;
+  if (!f) { syncSwitch(); return; }
   if (f.id !== lastShownId) { fitMode = true; lastShownId = f.id; }   // a newly selected fax opens at Fit
   const file = variant === 'raw' ? f.files.raw : f.files.enhanced;
   rot = rots[f.id] || 0;
@@ -282,6 +315,7 @@ function show(f) {
     f.enhance ? f.enhance.mode : '',
     f.review && f.review.length ? 'NOT PUBLISHED: ' + f.review.join('; ') : ''].filter(Boolean).join('  ·  ');
   document.querySelectorAll('.thumb').forEach(t => t.classList.toggle('sel', t.dataset.id === f.id));
+  syncSwitch();
 }
 // ---- thumbnail strip: one UTC day at a time, newest at the top ----
 const DAY = 86400000;

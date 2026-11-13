@@ -202,9 +202,37 @@ Without CAT, tell the decoder which station you are on with
 `--station DWD`, or pick it in the station box on the page.
 
 The schedules come from the OpenCPN weatherfax plugin's worldwide
-`WeatherFaxSchedules.xml` in `wefax/data/`, with the Northwood list
-corrected. To update them, put a newer copy of the file next to
-`wefax_decoder.py`.
+`WeatherFaxSchedules.xml` in `wefax/data/`, checked station by station
+against the NWS list of worldwide radiofax schedules (revision of 7 March
+2025) and corrected from reception. Stations that have stopped (Rio de
+Janeiro, Athens, Iqaluit, Resolute, Inuvik, Wellington) have been removed.
+Northwood's list is built in (`wefax/schedule.py`). To replace the file, put
+a newer copy next to `wefax_decoder.py`.
+
+### Monthly schedule check
+
+Once a month, at a quiet moment, the decoder downloads the NWS list
+([rfax.pdf](https://www.weather.gov/media/marine/rfax.pdf)) and compares
+each station's section with the copy it read last time:
+
+- a broadcast time that has appeared is added to that station (named from
+  the list; test charts, schedules and news pages are not added);
+- a time that has gone from the section is taken off;
+- a station whose section now says it has stopped (discontinued, stopped
+  broadcasting) is taken off.
+
+Because it compares NWS with NWS, quirks in reading the PDF cancel out and
+only real changes are applied. A section where more than half the times
+changed, or a station that has vanished from the list, is reported for you to
+check instead of applied. Stations removed on purpose are never brought back.
+A time that is added but never sent is dropped by the auto-scheduler's
+empty-slot learning.
+
+The changes go into `faxes/schedule/nws_updates.json` and apply on top of the
+XML straight away; every check is logged and appended to
+`faxes/schedule/nws_report.txt`. Halifax is not in the NWS list, so it is not
+checked. The list is a PDF; a small built-in reader (`wefax/minipdf.py`,
+standard library only) reads it, so nothing extra needs installing.
 
 ## Auto-scheduler
 
@@ -263,9 +291,14 @@ The auto-scheduler needs CAT. Press **AUTO** on the page, or start with
 - **Upgrading:** logs from versions before 16 Oct 2026 contain false failures (charts logged
   as failed while a good signal was on air). The first start of a newer version removes
   them once, keeping the original as `proplog_before_v2.jsonl`; nothing else is changed.
-- **Empty slots:** a priority-station slot that is silent three times while the same
-  frequency decodes the charts either side is taken as not broadcast and left out of
-  the plan, then tried again every 14 days (published schedules go out of date: in
+- **Empty slots:** a priority-station slot is taken as not broadcast, left out of the
+  plan and tried again every 14 days, when three times in a row either it is silent
+  while the same frequency decodes the charts either side, or the station is plainly
+  on air (SNR +5 dB or more) but nothing at all is received - DWD keeps a carrier up
+  between charts, and some listed slots are not used (since 1 Nov 2026 its 1834Z
+  chart has not been sent). Such a slot never counts against the frequency, whose
+  signal counts in its favour. The audio-fault warning needs strong-signal failures
+  on at least two stations, so one station's empty slots cannot trigger it (published schedules go out of date: in
   October 2026 Northwood no longer sent its ANPS T+24 charts and its 0936 slot carried
   a WAFC SIGWX chart; the built-in Northwood list is corrected for these).
 - **Silent DX probes:** if nothing is received 4 minutes into a DX slot and the
@@ -386,10 +419,13 @@ wefax/
   cat.py                  Kenwood TS-2000 CAT for SDR Console
   autosched.py            auto-scheduler, propagation model, learning log
   housekeep.py            nightly deletion of faxes older than the Keep setting
+  nwscheck.py             monthly check of the NWS worldwide schedule list
+  minipdf.py              small PDF text reader for that check (no dependencies)
   label.py                title block on the enhanced charts
   server.py               web server and live updates
   web/index.html          the page
-  data/                   OpenCPN WeatherFaxSchedules.xml (GPL-3.0, data)
+  data/                   OpenCPN WeatherFaxSchedules.xml (GPL-3.0, data),
+                          nws_baseline.json (the NWS list it was checked against)
   models/                 FSRCNN x2 ONNX weights (Apache-2.0)
 tools/
   make_test_signal.py     synthetic test transmissions
@@ -405,7 +441,8 @@ Three bundled third-party files keep their own licences:
 
 - `wefax/data/WeatherFaxSchedules.xml` is from the OpenCPN weatherfax plugin
   ([rgleason/weatherfax_pi](https://github.com/rgleason/weatherfax_pi)) and
-  stays under GPL-3.0 (see `wefax/data/WeatherFaxSchedules_LICENSE.txt`). It
+  stays under GPL-3.0 (see `wefax/data/WeatherFaxSchedules_LICENSE.txt`); this
+  copy has been corrected against the NWS list and reception. It
   is a data file read at run time, not part of the code. If you redistribute
   it, the GPL-3.0 terms apply to that file. You can also leave it out and
   supply your own copy next to `wefax_decoder.py`.

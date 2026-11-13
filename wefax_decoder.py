@@ -31,6 +31,7 @@ from wefax import dsp, decode, enhance, server
 from wefax.schedule import Schedules, slug
 from wefax import label
 from wefax import housekeep
+from wefax import nwscheck
 from wefax.lengths import ChartLengths, CLEAN_ENDS
 from wefax.frontend import Detector, LiveCapture
 
@@ -607,7 +608,7 @@ def main():
     if not args.no_browser and not (args.wav and args.exit):
         webbrowser.open(url)
 
-    sched = Schedules()
+    sched = Schedules(updates_dir=out)
     log.info("schedules: %d stations loaded", len(sched.stations))
     cat = None
     if not args.wav:
@@ -759,6 +760,9 @@ def main():
     # nightly clean-up of old faxes (Keep box on the page), at a quiet moment
     housekeep.start(out, hub, lambda: (cap.detector is None or cap.detector.state == "idle") and not proc.busy,
                     log.info)
+    # monthly check of the NWS worldwide schedule list (times changed, stations gone)
+    nwscheck.start(out, sched, lambda: (cap.detector is None or cap.detector.state == "idle") and not proc.busy,
+                   log.info)
     log.info("listening - Ctrl+C to stop")
     try:
         cap.run()

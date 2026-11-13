@@ -1,0 +1,3856 @@
+{
+"revision": "March 7, 2025",
+"sections": {
+"TOKYOJAPAN": {
+"dated": "122 Jan 2014",
+"off_air": false,
+"off_air_text": "",
+"times": {
+"0000": [
+"RETRANSMISSION OF",
+"12"
+],
+"1200": [
+"RETRANSMISSION OF",
+"06"
+],
+"0020": [
+"96HR SURFACE PRESSURE, PRECIP PROGS",
+"12"
+],
+"0040": [
+"120HR SURFACE PRESSURE, PRECIP PROGS",
+"12"
+],
+"1220": [
+"12/24/48/72HR OCEAN WAVE PROG",
+"00"
+],
+"1240": [
+"24 HR 500hPa TEMPERATURE AND 700hPa DEWPOINT",
+"00"
+],
+"1251": [
+"36 HR 500hPa TEMPERATURE AND 700hPa DEWPOINT",
+"00"
+],
+"0103": [
+"TEST CHART",
+""
+],
+"1303": [
+"TEST CHART",
+""
+],
+"0110": [
+"METEOROLOGICAL SATELLITE PICTURE (MSAT)",
+"00"
+],
+"1310": [
+"METEOROLOGICAL SATELLITE PICTURE (MSAT)",
+"12"
+],
+"0130": [
+"RETRANSMISSION OF",
+"00"
+],
+"1330": [
+"RETRANSMISSION OF",
+"00"
+],
+"0150": [
+"TROPICAL CYCLONE FORECAST(1)",
+"00"
+],
+"1350": [
+"TROPICAL CYCLONE FORECAST(1)",
+"12"
+],
+"0210": [
+"SEA SURFACE CURRENT, WATER TEMPERATURE AT 100M DEPTH (2)",
+""
+],
+"0229": [
+"RADIO PREDICTION (3)",
+""
+],
+"1420": [
+"RETRANSMISSION OF 0210 (2)",
+""
+],
+"0240": [
+"SURFACE ANALYSIS",
+"00"
+],
+"1440": [
+"SURFACE ANALYSIS",
+"12"
+],
+"0300": [
+"SEA SURFACE WATER TEMPERATURE (2)",
+""
+],
+"0320": [
+"THE FIRST RETRANSMISSION OF",
+"00"
+],
+"1520": [
+"THE FIRST RETRANSMISSION OF",
+"12"
+],
+"0340": [
+"BROADCAST SCHEDULE and MANUAL AMENDMENTS",
+""
+],
+"0400": [
+"TROPICAL CYCLONE FORECAST (6)",
+"00"
+],
+"1540": [
+"TROPICAL CYCLONE FORECAST (6)",
+"12"
+],
+"1600": [
+"SEA SURFACE WATER TEMPERATURE (2)",
+""
+],
+"0421": [
+"OCEAN WAVE ANALYSIS",
+"00"
+],
+"1620": [
+"OCEAN WAVE ANALYSIS",
+"12"
+],
+"0440": [
+"COASTAL WAVE ANALYSIS",
+"00"
+],
+"0459": [
+"500 hPa HEIGHT, TEMPERATURE",
+"00"
+],
+"1640": [
+"500 hPa HEIGHT, TEMPERATURE",
+"12"
+],
+"0518": [
+"850 hPa HEIGHT, TEMPERATURE, DEW POINT DEPRESSION",
+"00"
+],
+"1700": [
+"850 hPa HEIGHT, TEMPERATURE, DEW POINT DEPRESSION",
+"12"
+],
+"1719": [
+"COASTAL WAVE ANALYSIS",
+"12"
+],
+"0537": [
+"24HR 500 hPa HEIGHT, VORTICITY PROGNOSIS",
+"00"
+],
+"1739": [
+"24HR 500 hPa HEIGHT, VORTICITY PROGNOSIS",
+"12"
+],
+"0548": [
+"24HR SURFACE PRESSURE, WIND, FOG, ICING, SEA ICE PROG",
+"00"
+],
+"0610": [
+"RETRANSMISSION OF",
+"00"
+],
+"1750": [
+"RETRANSMISSION OF",
+"12"
+],
+"0630": [
+"48/72 HR SURFACE PRESSURE, PRECIPITATION PROGNOSIS",
+"00"
+],
+"1810": [
+"36HR 500 hPa HEIGHT, VORTICITY PROGNOSIS",
+"12"
+],
+"1821": [
+"24 HR 500 hPa TEMPERATURE AND 700 hPa DEWPOINT",
+"12"
+],
+"1832": [
+"36 HR 500 hPa TEMPERATURE AND 700 hPa DEWPOINT",
+"12"
+],
+"1850": [
+"12/24/48/72HR OCEAN WAVE PROG",
+"12"
+],
+"0651": [
+"24HR WAVE PROG (NORTH PACIFIC)",
+"00"
+],
+"0710": [
+"METEOROLOGICAL SATELLITE PICTURE (MSAT)",
+"06"
+],
+"1910": [
+"METEOROLOGICAL SATELLITE PICTURE (MSAT)",
+"18"
+],
+"0730": [
+"24HR COASTAL WAVE PROG",
+"00"
+],
+"1930": [
+"24HR SURFACE PRESSURE, WIND, FOG, ICING, SEA ICE PROG",
+"12"
+],
+"0750": [
+"TROPICAL CYCLONE FORECAST (1)",
+"06"
+],
+"1950": [
+"TROPICAL CYCLONE FORECAST (1)",
+"18"
+],
+"2010": [
+"24HR COASTAL WAVE PROG (1)",
+"12"
+],
+"0809": [
+"36HR 500 hPa HEIGHT, VORTICITY PROGNOSIS",
+"00"
+],
+"0820": [
+"48HR SURFACE PRESSURE, WIND, FOG, ICING, SEA ICE PROG",
+"00"
+],
+"0840": [
+"SURFACE ANALYSIS",
+"06"
+],
+"2040": [
+"SURFACE ANALYSIS",
+"18"
+],
+"2100": [
+"48HR SURFACE PRESSURE, WIND, FOG, ICING, SEA ICE PROG",
+"12"
+],
+"0900": [
+"TROPICAL CYCLONE FORECAST (6)",
+"06"
+],
+"0920": [
+"THE FIRST RETRANSMISSION OF",
+"06"
+],
+"2120": [
+"THE FIRST RETRANSMISSION OF",
+"18"
+],
+"0940": [
+"RETRANSMISSION OF",
+"00"
+],
+"2140": [
+"TROPICAL CYCLONE FORECAST(6)",
+"18"
+],
+"1000": [
+"RETRANSMISSION OF 0820",
+"00"
+],
+"2200": [
+"48/72HR SURFACE PRESSURE, PRECIPITATION PROGNOSIS",
+"12"
+],
+"1019": [
+"SEA ICE CONDITION ANAL(4), 48HR & 168 HR PROGS(5)",
+"00"
+],
+"2220": [
+"24HR OCEAN WAVE PROG",
+"12"
+],
+"1040": [
+"RETRANSMISSION OF",
+"00"
+],
+"2240": [
+"RETRANSMISSION OF",
+"18"
+],
+"1100": [
+"RETRANSMISSION OF",
+"00"
+],
+"2300": [
+"RETRANSMISSION OF",
+"12"
+],
+"1119": [
+"RETRANSMISSION OF",
+"00"
+],
+"2320": [
+"RETRANSMISSION OF",
+"12"
+],
+"1140": [
+"RETRANSMISSION OF",
+"00"
+],
+"2340": [
+"RETRANSMISSION OF",
+"12"
+]
+}
+},
+"KAGOSHIMA": {
+"dated": "",
+"off_air": false,
+"off_air_text": "",
+"times": {
+"0700": [
+"SEA SURFACE TEMPERATURE AROUND JAPAN (4)",
+""
+],
+"0730": [
+"WEATHER INFORMATION (4)",
+""
+],
+"1100": [
+"NOTIFICATIONS FROM RADIO STATIONS",
+""
+],
+"0020": [
+"SURFACE PRESSURE FORECAST",
+""
+],
+"0110": [
+"BROADCAST SCHEDULE (1)",
+""
+],
+"0330": [
+"FISH MARKET INFORMATION",
+""
+],
+"0400": [
+"SURFACE PRESSURE FORECAST (REBROADCAST)",
+""
+],
+"0440": [
+"TROPICAL CYCLONE INFORMATION (2)",
+""
+],
+"0830": [
+"TUNA MARKET INFORMATION",
+""
+],
+"0930": [
+"COAST GUARD NAVIGATIONAL WARNINGS",
+""
+],
+"1800": [
+"JFX NOAA INFORMATION",
+""
+],
+"2200": [
+"GENERAL NAVIGATIONAL WARNINGS",
+""
+],
+"2240": [
+"MARINE WEATHER (KAGOSHIMA, NAGASAKI, OKINAWA)",
+""
+],
+"0800": [
+"PACIFIC SAURY FISHING INFORMATION (5)",
+""
+],
+"0310": [
+"SURFACE ANALYSIS JMH ASAS",
+""
+],
+"0610": [
+"JFX NOAA INFORMATION (REBROADCAST)",
+""
+],
+"1030": [
+"MARITIME SECURITY INTELLIGENCE",
+""
+]
+}
+},
+"PEVEKCHUKOTKA": {
+"dated": "11/97",
+"off_air": false,
+"off_air_text": "",
+"times": {}
+},
+"SEOULREPUBLICOFKOREA": {
+"dated": "Jan 01, 2009",
+"off_air": false,
+"off_air_text": "",
+"times": {
+"0000": [
+"SPECIAL WEATHER REPORT",
+""
+],
+"1200": [
+"SPECIAL WEATHER REPORT",
+""
+],
+"0033": [
+"SEA-SHORE WEATHER OBSERVATION REPORT",
+""
+],
+"1233": [
+"SEA-SHORE WEATHER OBSERVATION REPORT",
+""
+],
+"0047": [
+"FISHERY WEATHER OBSERVATION REPORT",
+""
+],
+"1247": [
+"FISHERY WEATHER OBSERVATION REPORT",
+""
+],
+"0100": [
+"MANAM",
+""
+],
+"0133": [
+"LIGHTHOUSE WEATHER OBSERVATION REPORT",
+""
+],
+"0147": [
+"SURFACE ANALYSIS FAR EAST",
+""
+],
+"1347": [
+"SURFACE ANALYSIS FAR EAST",
+""
+],
+"0200": [
+"WARNING TYPHOON REPORT",
+""
+],
+"1400": [
+"WARNING TYPHOON REPORT",
+""
+],
+"0214": [
+"GENERAL WEATHER CONDITIONS REPORT",
+""
+],
+"1500": [
+"SPECIAL WEATHER REPORT",
+""
+],
+"1530": [
+"SST OBSERVATION CHART OF NEAR KOREAN PENINSULA AREA",
+""
+],
+"0314": [
+"LIGHTHOUSE SIGN WEATHER OBSERVATION REPORT",
+""
+],
+"1547": [
+"LIGHTHOUSE SIGN WEATHER OBSERVATION REPORT",
+""
+],
+"0333": [
+"LIGHTHOUSE WEATHER OBSERVATION REPORT",
+""
+],
+"0400": [
+"SURFACE ANALYSIS FAR ASIA",
+""
+],
+"1600": [
+"SURFACE ANALYSIS FAR ASIA",
+""
+],
+"0447": [
+"SURFACE ANALYSIS FAR EAST",
+""
+],
+"1647": [
+"SURFACE ANALYSIS FAR EAST",
+""
+],
+"0500": [
+"500 hPa UPPER AIR WEATHER CHART",
+""
+],
+"1700": [
+"500 hPa UPPER AIR WEATHER CHART",
+""
+],
+"0513": [
+"650 hPa UPPER AIR WEATHER CHART",
+""
+],
+"1713": [
+"650 hPa UPPER AIR WEATHER CHART",
+""
+],
+"0526": [
+"700 hPa UPPER AIR WEATHER CHART",
+""
+],
+"1726": [
+"700 hPa UPPER AIR WEATHER CHART",
+""
+],
+"0539": [
+"300 hPa UPPER AIR WEATHER CHART",
+""
+],
+"1739": [
+"300 hPa UPPER AIR WEATHER CHART",
+""
+],
+"0600": [
+"SPECIAL WEATHER REPORT",
+""
+],
+"1800": [
+"SPECIAL WEATHER REPORT",
+""
+],
+"0633": [
+"LIGHTHOUSE WEATHER OBSERVATION REPORT",
+""
+],
+"1833": [
+"SEA-SHORE WEATHER OBSERVATION REPORT",
+""
+],
+"0647": [
+"FISHERY WEATHER OBSERVATION REPORT",
+""
+],
+"1847": [
+"FISHERY WEATHER OBSERVATION REPORT",
+""
+],
+"0700": [
+"12HR WAVE HEIGHT & SEA SURFACE WIND FORECAST",
+""
+],
+"1900": [
+"12HR WAVE HEIGHT & SEA SURFACE WIND FORECAST",
+""
+],
+"0714": [
+"24HR WAVE HEIGHT & SEA SURFACE WIND FORECAST",
+""
+],
+"1914": [
+"24HR WAVE HEIGHT & SEA SURFACE WIND FORECAST",
+""
+],
+"0728": [
+"36HR WAVE HEIGHT & SEA SURFACE WIND FORECAST",
+""
+],
+"1928": [
+"36HR WAVE HEIGHT & SEA SURFACE WIND FORECAST",
+""
+],
+"0747": [
+"SURFACE ANALYSIS FAR EAST",
+""
+],
+"1947": [
+"SURFACE ANALYSIS FAR EAST",
+""
+],
+"0800": [
+"WARNING TYPHOON REPORT",
+""
+],
+"2000": [
+"WARNING TYPHOON REPORT",
+""
+],
+"0814": [
+"GENERAL WEATHER CONDITIONS REPORT",
+""
+],
+"2014": [
+"GENERAL WEATHER CONDITIONS REPORT",
+""
+],
+"0828": [
+"SST OBSERVATION CHART OF NEAR KOREAN PENINSULA AREA",
+""
+],
+"0846": [
+"MAIN SEASHORE WEATHER FORECAST FOR SHIP ROUTE",
+""
+],
+"2046": [
+"MAIN SEASHORE WEATHER FORECAST FOR SHIP ROUTE",
+""
+],
+"0900": [
+"SEA FORECAST",
+""
+],
+"2100": [
+"SEA FORECAST",
+""
+],
+"0914": [
+"LIGHTHOUSE SIGN WEATHER OBSERVATION REPORT",
+""
+],
+"2114": [
+"LIGHTHOUSE SIGN WEATHER OBSERVATION REPORT",
+""
+],
+"0933": [
+"LIGHTHOUSE WEATHER OBSERVATION REPORT",
+""
+],
+"2133": [
+"LIGHTHOUSE WEATHER OBSERVATION REPORT",
+""
+],
+"0947": [
+"WEEKLY SEA WEATHER FORECAST",
+""
+],
+"2147": [
+"WEEKLY SEA WEATHER FORECAST",
+""
+],
+"2233": [
+"LIGHTHOUSE WEATHER OBSERVATION REPORT",
+""
+],
+"1047": [
+"SURFACE ANALYSIS FAR EAST",
+""
+],
+"2247": [
+"SURFACE ANALYSIS FAR EAST",
+""
+]
+}
+},
+"BANGKOKTHAILAND": {
+"dated": "JAN 2009",
+"off_air": false,
+"off_air_text": "",
+"times": {
+"0050": [
+"TEST CHART",
+""
+],
+"0100": [
+"FORECAST FOR SHIPPING (IN ENGLISH)",
+"00"
+],
+"0700": [
+"FORECAST FOR SHIPPING (IN ENGLISH)",
+"06"
+],
+"0120": [
+"SURFACE PRESSURE",
+"12"
+],
+"0140": [
+"SURFACE ANALYSIS",
+"18"
+],
+"0200": [
+"BROADCAST SCHEDULE",
+""
+],
+"0300": [
+"24 HR SURFACE PROG",
+"12"
+],
+"0720": [
+"24 HR SURFACE PROG",
+"12"
+],
+"0320": [
+"48 HR SURFACE PROG",
+"12"
+],
+"0740": [
+"48 HR SURFACE PROG",
+"12"
+],
+"0340": [
+"72 HR SURFACE PROG",
+"12"
+],
+"0800": [
+"72 HR SURFACE PROG",
+"12"
+],
+"0820": [
+"24 HR 850 mb WIND/TEMP PROG",
+"12"
+],
+"0400": [
+"FORECAST FOR SHIPPING (IN ENGLISH)",
+"03"
+],
+"1000": [
+"FORECAST FOR SHIPPING (IN ENGLISH)",
+"09"
+],
+"0420": [
+"24 HR 850 mb WIND/TEMP PROG",
+"12"
+],
+"0500": [
+"SURFACE ANALYSIS",
+"00"
+],
+"1020": [
+"SURFACE ANALYSIS",
+"06"
+],
+"0520": [
+"850 mb ANALYSIS",
+"00"
+],
+"0540": [
+"700 mb ANALYSIS",
+"00"
+],
+"0600": [
+"500 mb ANALYSIS",
+"00"
+],
+"1300": [
+"FORECAST FOR SHIPPING (IN ENGLISH)",
+"12"
+],
+"1700": [
+"FORECAST FOR SHIPPING (IN ENGLISH)",
+"17"
+],
+"1720": [
+"SURFACE ANALYSIS",
+"12"
+],
+"2300": [
+"FORECAST FOR SHIPPING (IN ENGLISH)",
+"17"
+],
+"2320": [
+"SURFACE ANALYSIS",
+"18"
+]
+}
+},
+"JJCKYODONEWS": {
+"dated": "January 30, 2025",
+"off_air": false,
+"off_air_text": "",
+"times": {
+"0200": [
+"KYODO NEWS (EVENING) (1)",
+""
+],
+"0300": [
+"KYODO NEWS (MORNING), KYODO NEWS SPORTS (MORNING), JAPAN NAVIGATIONAL ",
+""
+],
+"0700": [
+"OCEAN CURRENT FORECASTING (MAP) (3) Sunday, Monday",
+""
+],
+"0710": [
+"KYODO NEWS (ENGLISH EDITION) (4) Tue Wed Thu Fri? Sat",
+""
+],
+"0730": [
+"MARINE ADMINISTRATI ON NEWS (5) Sat",
+""
+],
+"0745": [
+"KYODO NEWS (EVENING), KYODO KAIUN-SUISAN NEWS (6)",
+""
+],
+"0940": [
+"SUMO MATCH TABLE",
+""
+],
+"1000": [
+"KYODO FURUSATO NEWS (7)",
+""
+],
+"1020": [
+"KYODO NEWS SPORTS (MORNING), KYODO NEWS (MORNING)",
+""
+],
+"1130": [
+"JAPAN NAVIGATIONA L WARNINGS, SUMO MATCH TABLE",
+""
+],
+"1200": [
+"KYODO NEWS (ENGLISH EDITION) Mon Tue Wed Thu Fri? Sat?",
+""
+],
+"1400": [
+"KYODO KAIUN-SUISAN NEWS Mon Tue Wed Thu Fri Sat?",
+""
+],
+"1500": [
+"KYODO NEWS (MORNING), KYODO NEWS SPORTS (MORNING), JAPAN NAVIGATIONAL ",
+""
+],
+"1645": [
+"KYODO NEWS (EVENING)",
+""
+],
+"2300": [
+"KYODO NEWS (MORNING), KYODO NEWS SPORTS (MORNING), JAPAN NAVIGATIONAL ",
+""
+]
+}
+},
+"GUANGZHOUCOASTRADIOSTATION": {
+"dated": "",
+"off_air": false,
+"off_air_text": "",
+"times": {
+"0000": [
+"（ 0800 \u0002Å MANAM XSQ BROADCAST SCHEDULE AND MANUAL AMENDMENTS 手册修订时间",
+""
+],
+"0025": [
+"（ 0825 \u0002Å 00 \u0002Ä 08 \u0002Å FSAS024 24H SURFACE FORECAST 24h ）",
+""
+],
+"0050": [
+"（ 0850 \u0002Å 00 \u0002Ä 08 \u0002Å FSAS048 48H SURFACE FORECAST 48h ）",
+""
+],
+"0115": [
+"（ 0915 \u0002Å 00 \u0002Ä 08 \u0002Å FSAS072 72H SURFACE FORECAST 72h ）",
+""
+],
+"0140": [
+"（ 0940 \u0002Å 22 \u0002Ä 06 \u0002Å FSSS024 24H SOUTH CHINA SEA FORECAST （ 24h ） （ 1",
+""
+],
+"0215": [
+"（ 1015 \u0002Å 00 \u0002Ä 08 \u0002Å FTPW120 120H TROPICAL CYCLONE FORECAST 120h \u0002Å",
+""
+],
+"0240": [
+"\u0002Ä 1040 \u0002Å 22 \u0002Ä 06 \u0002Å FSSS048 48H SOUTH CHINA SEA FORECAST （ 48h ）",
+""
+],
+"0305": [
+"（ 1105 \u0002Å 22 \u0002Ä 06 \u0002Å FSSS072 72H SOUTH CHINA SEA FORECAST （ 72h ）",
+""
+],
+"0330": [
+"（ 1130 \u0002Å 00 \u0002Ä 08 \u0002Å FWEA024 24H WAVE HEIGHT,SURFACE WIND FORECAST 24",
+""
+],
+"0400": [
+"（ 1200 \u0002Å 00 \u0002Ä 08 \u0002Å ASPN SURFACE ANALYSIS 地面实况分析",
+""
+],
+"0425": [
+"（ 1225 \u0002Å 00 \u0002Ä 08 \u0002Å FWEA048 48H WAVE HEIGHT,SURFACE WIND FORECAST 48",
+""
+],
+"0450": [
+"（ 1250 \u0002Å 00 \u0002Ä 08 \u0002Å FWEA072 72H WAVE HEIGHT,SURFACE WIND FORECAST 72",
+""
+],
+"0515": [
+"（ 1315 >' REISSUE CHART 补发传真图 （ 1 ）",
+""
+],
+"0815": [
+"（ 1615 \u0002Å 06 \u0002Ä 14 \u0002Å FTPW120 120H TROPICAL CYCLONE FORECAST 120h ）",
+""
+],
+"1225": [
+"（ 2025 \u0002Å 12 \u0002Ä 20 \u0002Å FSAS024 24H SURFACE FORECAST 24h ）",
+""
+],
+"1250": [
+"（ 2050 \u0002Å 12 \u0002Ä 20 \u0002Å FSAS048 48H SURFACE FORECAST 48h ）",
+""
+],
+"1315": [
+"（ 2115 \u0002Å 12 \u0002Ä 20 \u0002Å FSAS072 72H SURFACE FORECAST 72h ）",
+""
+],
+"1340": [
+"（ 2140 \u0002Å 08 \u0002Ä 16 \u0002Å FSSS024 24H SOUTH CHINA SEA FORECAST （ 24h ） （ 1",
+""
+],
+"1415": [
+"（ 2215 \u0002Å 12 \u0002Ä 20 \u0002Å FTPW120 120H TROPICAL CYCLONE FORECAST 120h ）",
+""
+],
+"1440": [
+"（ 2240 \u0002Å 08 \u0002Ä 16 \u0002Å FSSS048 48H SOUTH CHINA SEA FORECAST （ 48h ）",
+""
+],
+"1505": [
+"（ 2305 \u0002Å 08 \u0002Ä 16 \u0002Å FSSS072 72H SOUTH CHINA SEA FORECAST （ 72h ）",
+""
+],
+"1600": [
+"（ 0000 \u0002Å 12 \u0002Ä 20 \u0002Å FWEA024 24H WAVE HEIGHT,SURFACE WIND FORECAST 24",
+""
+],
+"1625": [
+"（ 0025 \u0002Å 12 \u0002Ä 20 \u0002Å FWEA048 48H WAVE HEIGHT,SURFACE WIND FORECAST 48",
+""
+],
+"1650": [
+"（ 0050 \u0002Å 12 \u0002Ä 20 \u0002Å FWEA072 72H WAVE HEIGHT,SURFACE WIND FORECAST 72",
+""
+],
+"2015": [
+"（ 0415 \u0002Å 18 \u0002Ä 02 \u0002Å FTPW120 120H TROPICAL CYCLONE FORECAST 120h ）",
+""
+]
+}
+},
+"VALPARAISOPLAYAANCHACHILE": {
+"dated": "Sep 23, 2010",
+"off_air": false,
+"off_air_text": "",
+"times": {
+"1100": [
+"TEST CHART CBV CBM SCHEDULES",
+""
+],
+"1115": [
+"SURFACE CHART",
+"06"
+],
+"1130": [
+"SATELLITE IMAGE",
+"09"
+],
+"1630": [
+"24 HR SURFACE FORECAST",
+"12"
+],
+"1645": [
+"SATELLITE IMAGE",
+"15"
+],
+"1915": [
+"SURFACE CHART",
+"12"
+],
+"1930": [
+"SATELLITE IMAGE",
+"18"
+],
+"2200": [
+"36 HR SURFACE FORECAST",
+"00"
+],
+"2215": [
+"SURFACE CHART",
+"18"
+],
+"2230": [
+"WINDS BARB ISOTACHS FORECAST",
+"12"
+],
+"2310": [
+"48 HR SURFACE FORECAST",
+"12"
+],
+"2325": [
+"SATELLITE IMAGE",
+"21"
+],
+"1550": [
+"TEST CHART CBV CBM SCHEDULES",
+""
+],
+"1605": [
+"12HR SURFACE FORECAST",
+"00"
+],
+"1620": [
+"SATELLITE IMAGE",
+"12"
+],
+"1730": [
+"SURFACE CHART",
+"12"
+],
+"1745": [
+"SATELLITE IMAGE",
+"15"
+],
+"2005": [
+"SIGNIFICANT WAVE MAP FORECAST",
+"12"
+],
+"2020": [
+"SATELLITE IMAGE",
+"18"
+],
+"2240": [
+"36 HR SURFACE FORECAST",
+"00"
+],
+"2255": [
+"SURFACE CHART",
+"18"
+],
+"0350": [
+"48 HR SURFACE FORECAST",
+"12"
+],
+"0405": [
+"SATELLITE IMAGE",
+"24"
+]
+}
+},
+"IQALUITCANADA": {
+"dated": "August 2024",
+"off_air": true,
+"off_air_text": "Discontinued",
+"times": {}
+},
+"RESOLUTECANADA": {
+"dated": "August 2024",
+"off_air": true,
+"off_air_text": "Discontinued",
+"times": {}
+},
+"INUVIKCANADA": {
+"dated": "August 2024",
+"off_air": true,
+"off_air_text": "Discontinued",
+"times": {}
+},
+"SYDNEYNOVASCOTIACANADA": {
+"dated": "2014",
+"off_air": false,
+"off_air_text": "",
+"times": {
+"1121": [
+"ICE ANALYSIS GULF OF ST. LAWRENCE",
+""
+],
+"1142": [
+"ICE ANALYSIS EAST OR SOUTHEAST NEWFOUNDLAND WATERS",
+""
+],
+"1741": [
+"ICE ANALYSIS ICEBERG LIMIT",
+""
+],
+"2200": [
+"ICE ANALYSIS GULF OF ST. LAWRENCE",
+""
+],
+"2331": [
+"ICE ANALYSIS EAST OR SOUTHEAST NEWFOUNDLAND WATERS",
+""
+]
+}
+},
+"KODIAKALASKAUSA": {
+"dated": "Feb. 12, 2020",
+"off_air": false,
+"off_air_text": "",
+"times": {
+"0340": [
+"TEST PATTERN",
+""
+],
+"1540": [
+"TEST PATTERN",
+""
+],
+"0343": [
+"SEA ICE ANALYSIS/REBROADCAST 1057",
+""
+],
+"1543": [
+"SEA ICE ANALYSIS/REBROADCAST 1057",
+""
+],
+"0403": [
+"SURFACE ANALYSIS",
+"00"
+],
+"1603": [
+"SURFACE ANALYSIS",
+"12"
+],
+"0427": [
+"REBROADCAST 24HR SURFACE F'CAST",
+"12"
+],
+"1627": [
+"REBROADCAST 24HR SURFACE F'CAST",
+"00"
+],
+"0437": [
+"REBROADCAST 48HR SURFACE F'CAST",
+"12"
+],
+"1637": [
+"REBROADCAST 48HR SURFACE F'CAST",
+"00"
+],
+"0447": [
+"REBROADCAST 96HR SURFACE F'CAST 2348",
+"12"
+],
+"1647": [
+"REBROADCAST 96HR SURFACE F'CAST 2348",
+"12"
+],
+"0456": [
+"SEA STATE ANALYSIS/REBROADCAST",
+"00"
+],
+"1656": [
+"SEA STATE ANALYSIS/REBROADCAST",
+"00"
+],
+"0506": [
+"GOES IR SATELLITE IMAGE",
+"00"
+],
+"1706": [
+"GOES IR SATELLITE IMAGE",
+"12"
+],
+"0517": [
+"500 MB ANALYSIS",
+"00"
+],
+"1717": [
+"500 MB ANALYSIS",
+"12"
+],
+"0527": [
+"SYMBOLS AND CONTRACTIONS/SCHEDULE",
+""
+],
+"1727": [
+"SYMBOLS AND CONTRACTIONS/SCHEDULE",
+""
+],
+"0548": [
+"REQUEST FOR COMMENTS/PRODUCT NOTICE",
+""
+],
+"1748": [
+"REQUEST FOR COMMENTS/PRODUCT NOTICE",
+""
+],
+"0558": [
+"24HR 500 MB FORECAST",
+"00"
+],
+"1758": [
+"24HR 500 MB FORECAST",
+"12"
+],
+"1808": [
+"48HR 500 MB FORECAST",
+"12"
+],
+"0950": [
+"TEST PATTERN",
+""
+],
+"2150": [
+"TEST PATTERN",
+""
+],
+"0953": [
+"SURFACE ANALYSIS",
+"06"
+],
+"2153": [
+"SURFACE ANALYSIS",
+"18"
+],
+"1017": [
+"24HR SURFACE FORECAST",
+"00"
+],
+"2203": [
+"24HR SURFACE FORECAST",
+"12"
+],
+"1027": [
+"24HR WIND/WAVE FORECAST",
+"00"
+],
+"2217": [
+"24HR WIND/WAVE FORECAST",
+"12"
+],
+"1037": [
+"48HR SURFACE FORECAST",
+"00"
+],
+"2227": [
+"48HR SURFACE FORECAST",
+"12"
+],
+"1047": [
+"48HR WIND/WAVE FORECAST",
+"00"
+],
+"2237": [
+"48HR WIND/WAVE FORECAST",
+"12"
+],
+"2247": [
+"48HR WAVE PERIOD, SWELL DIRECTION",
+"12"
+],
+"1057": [
+"5-DAY SEA ICE FORECAST/REBROADCAST 0343",
+""
+],
+"2257": [
+"5-DAY SEA ICE FORECAST/REBROADCAST 0343",
+""
+],
+"1117": [
+"GOES IR SATELLITE IMAGE",
+"06"
+],
+"2307": [
+"GOES IR SATELLITE IMAGE",
+"18"
+],
+"1128": [
+"48HR WAVE PERIOD, SWELL DIRECTION",
+"00"
+],
+"1138": [
+"48HR 500 MB FORECAST",
+"00"
+],
+"1148": [
+"SEA SURFACE TEMPERATURE ANALYSIS",
+""
+],
+"1159": [
+"COOK INLET SEA ICE FORECAST",
+""
+],
+"2317": [
+"72HR SURFACE FORECAST",
+"12"
+],
+"2328": [
+"72HR WIND/WAVE FORECAST",
+"12"
+],
+"2338": [
+"72HR WAVE PERIOD, SWELL DIRECTION",
+"12"
+],
+"2348": [
+"96HR SURFACE FORECAST",
+"12"
+],
+"2358": [
+"96HR WIND/WAVE FORECAST",
+"12"
+],
+"0008": [
+"96HR WAVE PERIOD, SWELL DIRECTION",
+"12"
+],
+"0018": [
+"96HR 500 MB FORECAST",
+"12"
+]
+}
+},
+"PTREYESCALIFORNIAUSA": {
+"dated": "Feb. 12, 2020",
+"off_air": false,
+"off_air_text": "",
+"times": {
+"0140": [
+"TEST PATTERN",
+""
+],
+"1400": [
+"TEST PATTERN",
+""
+],
+"0143": [
+"NE PACIFIC GOES IR SATELLITE IMAGE",
+"00"
+],
+"1403": [
+"NE PACIFIC GOES IR SATELLITE IMAGE",
+"12"
+],
+"0154": [
+"PACIFIC GOES IR SATELLITE IMAGE",
+"00"
+],
+"1414": [
+"PACIFIC GOES IR SATELLITE IMAGE",
+"12"
+],
+"0205": [
+"TROPICAL SEA STATE ANALYSIS",
+"00"
+],
+"1425": [
+"TROPICAL SEA STATE ANALYSIS",
+"12"
+],
+"0215": [
+"TROPICAL 48HR SURFACE FORECAST",
+"12"
+],
+"1435": [
+"TROPICAL 48HR SURFACE FORECAST",
+"00"
+],
+"0225": [
+"TROPICAL 48HR WIND/WAVE FORECAST",
+"12"
+],
+"0235": [
+"TROPICAL 72HR WIND/WAVE FORECAST",
+"12"
+],
+"0245": [
+"500MB ANALYSIS",
+"00"
+],
+"1445": [
+"500MB ANALYSIS",
+"12"
+],
+"0255": [
+"SEA STATE ANALYSIS, WIND/WAVE ANALYSIS",
+"00"
+],
+"1455": [
+"SEA STATE ANALYSIS, WIND/WAVE ANALYSIS",
+"12"
+],
+"0305": [
+"PRELIM SURFACE ANALYSIS(PART 1 NE PAC)",
+"00"
+],
+"1505": [
+"PRELIM SURFACE ANALYSIS(PART 1 NE PAC)",
+"12"
+],
+"0318": [
+"PRELIM SURFACE ANALYSIS(PART 2 NW PAC)",
+"00"
+],
+"1518": [
+"PRELIM SURFACE ANALYSIS(PART 2 NW PAC)",
+"12"
+],
+"0331": [
+"FINAL SURFACE ANALYSIS(PART 1 NE PAC)",
+"00"
+],
+"1531": [
+"FINAL SURFACE ANALYSIS(PART 1 NE PAC)",
+"12"
+],
+"0344": [
+"FINAL SURFACE ANALYSIS(PART 2 NW PAC)",
+"00"
+],
+"1544": [
+"FINAL SURFACE ANALYSIS(PART 2 NW PAC)",
+"12"
+],
+"0357": [
+"CYCLONE DANGER AREA* or HIGH WIND/WAVES",
+"03"
+],
+"1557": [
+"CYCLONE DANGER AREA* or HIGH WIND/WAVES",
+"15"
+],
+"0408": [
+"TROPICAL SURFACE ANALYSIS",
+"00"
+],
+"1608": [
+"TROPICAL SURFACE ANALYSIS",
+"12"
+],
+"0655": [
+"TEST PATTERN",
+""
+],
+"1820": [
+"TEST PATTERN",
+""
+],
+"0657": [
+"1953Z REBROADCAST (96HR 500MB)",
+"12"
+],
+"0707": [
+"1933Z REBROADCAST (96HR SURFACE)",
+"12"
+],
+"0717": [
+"1943Z REBROADCAST (96HR WIND/WAVE)",
+"12"
+],
+"0727": [
+"2003Z REBROADCAST (96HR WAVE PERIOD)",
+"12"
+],
+"1822": [
+"24HR SURFACE FORECAST",
+"12"
+],
+"1832": [
+"24HR WIND/WAVE FORECAST",
+"12"
+],
+"1842": [
+"24HR 500MB FORECAST",
+"12"
+],
+"1852": [
+"SST ANALYSIS",
+""
+],
+"1902": [
+"SST ANALYSIS",
+""
+],
+"0737": [
+"TROPICAL GOES IR SATELLITE IMAGE",
+"06"
+],
+"1913": [
+"TROPICAL GOES IR SATELLITE IMAGE",
+"18"
+],
+"0748": [
+"WIND/WAVE ANALYSIS",
+"06"
+],
+"1923": [
+"WIND/WAVE ANALYSIS",
+"18"
+],
+"0758": [
+"24HR SURFACE FORECAST",
+"00"
+],
+"0808": [
+"24HR WIND/WAVE FORECAST",
+"00"
+],
+"0818": [
+"24HR 500MB FORECAST",
+"00"
+],
+"1933": [
+"96HR SURFACE FORECAST",
+"12"
+],
+"1943": [
+"96HR WIND/WAVE FORECAST",
+"12"
+],
+"1953": [
+"96HR 500MB FORECAST",
+"12"
+],
+"2003": [
+"96HR WAVE PERIOD/SWELL DIRECTION",
+"12"
+],
+"0828": [
+"48HR SURFACE FORECAST",
+"00"
+],
+"2013": [
+"48HR SURFACE FORECAST",
+"12"
+],
+"0838": [
+"48HR WIND/WAVE FORECAST",
+"00"
+],
+"2023": [
+"48HR WIND/WAVE FORECAST",
+"12"
+],
+"0848": [
+"48HR 500MB FORECAST",
+"00"
+],
+"2033": [
+"48HR 500MB FORECAST",
+"12"
+],
+"0858": [
+"48HR WAVE PERIOD/SWELL DIRECTION",
+"00"
+],
+"2043": [
+"48HR WAVE PERIOD/SWELL DIRECTION",
+"12"
+],
+"2053": [
+"72HR SURFACE FORECAST",
+"12"
+],
+"2103": [
+"72HR WIND/WAVE FORECAST",
+"12"
+],
+"0908": [
+"PACIFIC GOES IR SATELLITE IMAGE",
+"06"
+],
+"2113": [
+"PACIFIC GOES IR SATELLITE IMAGE",
+"18"
+],
+"0919": [
+"SURFACE ANALYSIS (PART 1 NE PACIFIC)",
+"06"
+],
+"2124": [
+"SURFACE ANALYSIS (PART 1 NE PACIFIC)",
+"18"
+],
+"0932": [
+"SURFACE ANALYSIS (PART 2 NW PACIFIC)",
+"06"
+],
+"2137": [
+"SURFACE ANALYSIS (PART 2 NW PACIFIC)",
+"18"
+],
+"0945": [
+"TROPICAL SURFACE ANALYSIS",
+"06"
+],
+"2150": [
+"TROPICAL SURFACE ANALYSIS",
+"18"
+],
+"0959": [
+"TROPICAL 24HR WIND/WAVE FORECAST",
+"00"
+],
+"2204": [
+"TROPICAL 24HR WIND/WAVE FORECAST",
+"12"
+],
+"1009": [
+"CYCLONE DANGER AREA* or HIGH WIND/WAVES",
+"09"
+],
+"2214": [
+"CYCLONE DANGER AREA* or HIGH WIND/WAVES",
+"21"
+],
+"1120": [
+"TEST PATTERN",
+""
+],
+"2320": [
+"TEST PATTERN",
+""
+],
+"1124": [
+"BROADCAST SCHEDULE (PART 1)",
+""
+],
+"2324": [
+"BROADCAST SCHEDULE (PART 1)",
+""
+],
+"1135": [
+"BROADCAST SCHEDULE (PART 2)",
+""
+],
+"2335": [
+"BROADCAST SCHEDULE (PART 2)",
+""
+],
+"1146": [
+"REQUEST FOR COMMENTS",
+""
+],
+"1157": [
+"PRODUCT NOTICE BULLETIN",
+""
+],
+"1208": [
+"TROPICAL 48HR WIND/WAVE FORECAST",
+"00"
+],
+"1218": [
+"TROPICAL 72HR WIND/WAVE FORECAST",
+"00"
+],
+"1228": [
+"TROPICAL 48HR WAVE PERIOD/SWELL DIR",
+"00"
+],
+"2346": [
+"TROPICAL 48HR WAVE PERIOD/SWELL DIR",
+"12"
+],
+"2356": [
+"TROPICAL 72HR WAVE PERIOD/SWELL DIR",
+"00"
+]
+}
+},
+"NEWORLEANSLOUISIANAUSA": {
+"dated": "Feb. 12, 2020",
+"off_air": false,
+"off_air_text": "",
+"times": {
+"0000": [
+"TEST PATTERN",
+""
+],
+"1200": [
+"TEST PATTERN",
+""
+],
+"0005": [
+"U.S./TROPICAL SURFACE ANALYSIS (W HALF)",
+"18"
+],
+"1205": [
+"U.S./TROPICAL SURFACE ANALYSIS (W HALF)",
+"06"
+],
+"0020": [
+"TROPICAL SURFACE ANALYSIS (E HALF)",
+"18"
+],
+"1220": [
+"TROPICAL SURFACE ANALYSIS (E HALF)",
+"06"
+],
+"0035": [
+"REBROADCAST OF",
+"12"
+],
+"1235": [
+"REBROADCAST OF",
+"00"
+],
+"0045": [
+"REBROADCAST OF",
+"12"
+],
+"1245": [
+"REBROADCAST OF",
+"00"
+],
+"0055": [
+"REBROADCAST OF",
+"12"
+],
+"1255": [
+"REBROADCAST OF",
+"00"
+],
+"0105": [
+"REBROADCAST OF",
+"12"
+],
+"1305": [
+"REBROADCAST OF",
+"00"
+],
+"0115": [
+"REBROADCAST OF",
+"12"
+],
+"1315": [
+"REBROADCAST OF",
+"00"
+],
+"0125": [
+"REBROADCAST OF",
+"12"
+],
+"1325": [
+"REBROADCAST OF",
+"00"
+],
+"0135": [
+"CYCLONE DANGER AREA* or 48 HR HIGH WIND/WAVES",
+"21"
+],
+"1335": [
+"CYCLONE DANGER AREA* or 48 HR HIGH WIND/WAVES",
+"09"
+],
+"0150": [
+"REBROADCAST OF 0825 (72 HR WAVE PD/SWELL)",
+"00"
+],
+"1350": [
+"36 HR WIND/WAVE FORECAST",
+"12"
+],
+"0200": [
+"GOES IR TROPICAL SATELLITE IMAGE",
+"00"
+],
+"1400": [
+"GOES IR TROPICAL SATELLITE IMAGE",
+"12"
+],
+"0215": [
+"SEA STATE ANALYSIS",
+"00"
+],
+"1415": [
+"SEA STATE ANALYSIS",
+"12"
+],
+"0225": [
+"REQUEST FOR COMMENTS/PRODUCT NOTICE",
+""
+],
+"1425": [
+"REQUEST FOR COMMENTS/PRODUCT NOTICE",
+""
+],
+"0245": [
+"HIGH SEAS FORECAST (IN ENGLISH)",
+"22"
+],
+"1445": [
+"HIGH SEAS FORECAST (IN ENGLISH)",
+"10"
+],
+"0600": [
+"TEST PATTERN",
+""
+],
+"1800": [
+"TEST PATTERN",
+""
+],
+"0605": [
+"U.S./TROPICAL SURFACE ANALYSIS (W HALF)",
+"00"
+],
+"1805": [
+"U.S./TROPICAL SURFACE ANALYSIS (W HALF)",
+"12"
+],
+"0620": [
+"TROPICAL SURFACE ANALYSIS (E HALF)",
+"00"
+],
+"1820": [
+"TROPICAL SURFACE ANALYSIS (E HALF)",
+"12"
+],
+"0635": [
+"48 HR WAVE PERIOD/SWELL DIRECTION",
+"00"
+],
+"1835": [
+"48 HR WAVE PERIOD/SWELL DIRECTION",
+"12"
+],
+"0645": [
+"REBROADCAST OF",
+"00"
+],
+"1845": [
+"REBROADCAST OF",
+"12"
+],
+"0655": [
+"24 HR SURFACE FORECAST",
+"00"
+],
+"1855": [
+"24 HR SURFACE FORECAST",
+"12"
+],
+"0705": [
+"48 HR SURFACE FORECAST",
+"00"
+],
+"1905": [
+"48 HR SURFACE FORECAST",
+"12"
+],
+"0715": [
+"72 HR SURFACE FORECAST",
+"00"
+],
+"1915": [
+"72 HR SURFACE FORECAST",
+"12"
+],
+"0725": [
+"24 HR WIND/WAVE FORECAST",
+"00"
+],
+"1925": [
+"24 HR WIND/WAVE FORECAST",
+"12"
+],
+"0735": [
+"CYCLONE DANGER AREA* or 48HR HIGH WIND/WAVES",
+"03"
+],
+"1935": [
+"CYCLONE DANGER AREA* or 48HR HIGH WIND/WAVES",
+"15"
+],
+"0750": [
+"48 HR WIND/WAVE FORECAST",
+"00"
+],
+"1950": [
+"48 HR WIND/WAVE FORECAST",
+"12"
+],
+"0800": [
+"GOES IR TROPICAL SATELLITE IMAGE",
+"06"
+],
+"2000": [
+"GOES IR TROPICAL SATELLITE IMAGE",
+"18"
+],
+"0815": [
+"72 HR WIND/WAVE FORECAST",
+"00"
+],
+"2015": [
+"72 HR WIND/WAVE FORECAST",
+"12"
+],
+"0825": [
+"72 HR WAVE PERIOD/SWELL DIRECTION",
+"00"
+],
+"0835": [
+"REBROADCAST OF 0215 (SEA STATE ANALYSIS)",
+"12"
+],
+"2025": [
+"BROADCAST SCHEDULE",
+""
+],
+"0845": [
+"HIGH SEAS FORECAST (IN ENGLISH)",
+"04"
+],
+"2045": [
+"HIGH SEAS FORECAST (IN ENGLISH)",
+"16"
+]
+}
+},
+"BOSTONMASSACHUSETTSUSA": {
+"dated": "",
+"off_air": false,
+"off_air_text": "",
+"times": {
+"0230": [
+"TEST PATTERN",
+""
+],
+"1400": [
+"TEST PATTERN",
+""
+],
+"0233": [
+"PRELIMINARY SURFACE ANALYSIS",
+"00"
+],
+"0243": [
+"BROADCAST SCHEDULE (PART 1)",
+""
+],
+"1405": [
+"BROADCAST SCHEDULE (PART 1)",
+""
+],
+"0254": [
+"BROADCAST SCHEDULE (PART 2)",
+""
+],
+"1420": [
+"BROADCAST SCHEDULE (PART 2)",
+""
+],
+"0305": [
+"REQUEST FOR COMMENTS",
+""
+],
+"1433": [
+"REQUEST FOR COMMENTS",
+""
+],
+"1443": [
+"PRODUCT NOTICE BULLETIN",
+""
+],
+"1453": [
+"PRELIMINARY SURFACE ANALYSIS",
+"12"
+],
+"1503": [
+"SATELLITE IMAGE",
+"12"
+],
+"0315": [
+"WIND/WAVE ANALYSIS",
+"00"
+],
+"1515": [
+"WIND/WAVE ANALYSIS",
+"12"
+],
+"0325": [
+"SURFACE ANALYSIS (PART 1 NE ATLANTIC)",
+"00"
+],
+"1525": [
+"SURFACE ANALYSIS (PART 1 NE ATLANTIC)",
+"12"
+],
+"0338": [
+"SURFACE ANALYSIS (PART 2 NW ATLANTIC)",
+"00"
+],
+"1538": [
+"SURFACE ANALYSIS (PART 2 NW ATLANTIC)",
+"12"
+],
+"0351": [
+"SATELLITE IMAGE",
+"00"
+],
+"1600": [
+"ICE CHART (REBROADCAST)",
+"21"
+],
+"1720": [
+"TEST PATTERN",
+""
+],
+"0402": [
+"(REBROADCAST OF",
+"00"
+],
+"1723": [
+"(REBROADCAST OF",
+"12"
+],
+"0415": [
+"(REBROADCAST OF",
+"00"
+],
+"1736": [
+"(REBROADCAST OF",
+"12"
+],
+"0428": [
+"500MB ANALYSIS",
+"00"
+],
+"1749": [
+"500MB ANALYSIS",
+"12"
+],
+"1759": [
+"SEA STATE ANALYSIS",
+"12"
+],
+"0438": [
+"ICE CHART (REBROADCAST)",
+"21"
+],
+"1810": [
+"24HR SURFACE FORECAST",
+"12"
+],
+"0452": [
+"CYCLONE DANGER AREA* or HIGH WIND/WAVES",
+"03"
+],
+"1824": [
+"CYCLONE DANGER AREA* or HIGH WIND/WAVES",
+"15"
+],
+"1835": [
+"24HR WIND/WAVE FORECAST",
+"12"
+],
+"1855": [
+"24HR 500MB FORECAST",
+"12"
+],
+"0745": [
+"TEST PATTERN",
+""
+],
+"0755": [
+"PRELIMINARY SURFACE ANALYSIS",
+"06"
+],
+"0805": [
+"24HR SURFACE FORECAST",
+"00"
+],
+"0815": [
+"24HR WIND/WAVE FORECAST",
+"00"
+],
+"0825": [
+"24HR 500MB FORECAST",
+"00"
+],
+"0835": [
+"36HR 500MB FORECAST",
+"00"
+],
+"1905": [
+"36HR 500MB FORECAST",
+"12"
+],
+"1915": [
+"96HR SURFACE FORECAST",
+"12"
+],
+"1925": [
+"96HR WIND/WAVE FORECAST",
+"12"
+],
+"1935": [
+"96HR 500MB FORECAST",
+"12"
+],
+"1945": [
+"96HR WAVE PERIOD FORECAST",
+"12"
+],
+"0845": [
+"48HR SURFACE FORECAST",
+"00"
+],
+"1955": [
+"48HR SURFACE FORECAST",
+"12"
+],
+"0855": [
+"48HR WIND/WAVE FORECAST",
+"00"
+],
+"2005": [
+"48HR WIND/WAVE FORECAST",
+"12"
+],
+"0905": [
+"48HR 500MB FORECAST",
+"00"
+],
+"2015": [
+"48HR 500MB FORECAST",
+"12"
+],
+"0915": [
+"48HR WAVE PERIOD FORECAST",
+"00"
+],
+"2025": [
+"48HR WAVE PERIOD FORECAST",
+"12"
+],
+"2035": [
+"PRELIMINARY SURFACE ANALYSIS",
+"18"
+],
+"2045": [
+"72HR SURFACE FORECAST",
+"12"
+],
+"2055": [
+"72HR WIND/WAVE FORECAST",
+"12"
+],
+"2105": [
+"72HR 500MB FORECAST",
+"12"
+],
+"2115": [
+"72HR WAVE PERIOD FORECAST",
+"12"
+],
+"0925": [
+"SURFACE ANALYSIS (PART 1 NE ATLANTIC)",
+"06"
+],
+"2125": [
+"SURFACE ANALYSIS (PART 1 NE ATLANTIC)",
+"18"
+],
+"0938": [
+"SURFACE ANALYSIS (PART 2 NW ATLANTIC)",
+"06"
+],
+"2138": [
+"SURFACE ANALYSIS (PART 2 NW ATLANTIC)",
+"18"
+],
+"0951": [
+"SATELLITE IMAGE",
+"06"
+],
+"2151": [
+"SATELLITE IMAGE",
+"18"
+],
+"1002": [
+"(REBROADCAST OF",
+"06"
+],
+"2202": [
+"(REBROADCAST OF",
+"18"
+],
+"1015": [
+"(REBROADCAST OF",
+"06"
+],
+"2215": [
+"(REBROADCAST OF",
+"18"
+],
+"1028": [
+"CYCLONE DANGER AREA* or HIGH WIND/WAVES",
+"09"
+],
+"2228": [
+"CYCLONE DANGER AREA* or HIGH WIND/WAVES",
+"21"
+],
+"1039": [
+"REBROADCAST/N American Ice Service Chart",
+"21"
+],
+"2239": [
+"REBROADCAST/N American Ice Service Chart",
+"21"
+]
+}
+},
+"CHARLEVILLEAUSTRALIA": {
+"dated": "Apr 20, 2022",
+"off_air": false,
+"off_air_text": "",
+"times": {
+"1200": [
+"Australian MSLP Prog (H+36)",
+"12"
+],
+"0015": [
+"VMC/VMW Schedule Page 1 of 2",
+""
+],
+"1215": [
+"VMC/VMW Schedule Page 1 of 2",
+""
+],
+"0030": [
+"VMC/VMW Schedule Page 2 of 2",
+""
+],
+"1230": [
+"VMC/VMW Schedule Page 2 of 2",
+""
+],
+"0045": [
+"VMC/VMW Information Notice",
+""
+],
+"0100": [
+"IPS Recommended Frequencies for VMC (Charleville)",
+""
+],
+"0130": [
+"IPS RECOMMENDED FREQUENCIES FOR VMW",
+""
+],
+"1245": [
+"Indian Ocean MSLP Prog (H+36)",
+"12"
+],
+"1315": [
+"South Pacific Ocean Total Waves (H+48)",
+"00"
+],
+"1330": [
+"Indian Ocean Total Waves (H+48)",
+"00"
+],
+"1345": [
+"Pacific Ocean Sea Surface Temps (Weekly)",
+""
+],
+"1400": [
+"Indian Ocean Sea Surface Temps (Weekly)",
+""
+],
+"0200": [
+"Australian MSLP Prog (H+36)",
+"00"
+],
+"1415": [
+"Casey Eastern and Western High Seas (H+48)",
+"00"
+],
+"0245": [
+"Australian MSLP Anal (Manual)",
+"00"
+],
+"1430": [
+"Australian MSLP Anal (Manual)",
+"12"
+],
+"0300": [
+"Australian 500 hPa Anal",
+"00"
+],
+"1500": [
+"Australian 500 hPa Anal",
+"12"
+],
+"0315": [
+"Voice Broadcast Information for VMW (Wiluna) and VMC (Charleville)",
+""
+],
+"1515": [
+"Australian MSLP Prog ( H+36)",
+"12"
+],
+"0400": [
+"Australian 500 hPa (H+24) Prog",
+"00"
+],
+"0430": [
+"Australian MSLP 4 day forecast, Days 1 and-2",
+""
+],
+"1530": [
+"Australian MSLP 4 day forecast, Days 1 and-2",
+""
+],
+"0445": [
+"Australian MSLP 4 day forecast, Days 3 and-4",
+""
+],
+"1545": [
+"Australian MSLP 4 day forecast, Days 3 and-4",
+""
+],
+"1600": [
+"Australian 500 hPa (H+24) Prog",
+"12"
+],
+"1630": [
+"IPS Recommended Frequencies for VMC (Charleville)",
+""
+],
+"1700": [
+"IPS Recommended Frequencies for VMW (Wiluna)",
+""
+],
+"0600": [
+"Asian (Part A) Gradient Level Wind Anal (Manual)",
+"00"
+],
+"1800": [
+"Asian (Part A) Gradient Level Wind Anal (Manual)",
+"12"
+],
+"0623": [
+"Asian (Part B) Gradient Level Wind Anal (Manual)",
+"00"
+],
+"1823": [
+"Asian (Part B) Gradient Level Wind Anal (Manual)",
+"12"
+],
+"0645": [
+"",
+""
+],
+"0730": [
+"Indian Ocean MSLP Anal (Manual)",
+"00"
+],
+"1915": [
+"Indian Ocean MSLP Anal (Manual)",
+"12"
+],
+"0745": [
+"Australian Wind Waves Ht(m) Prog",
+"00"
+],
+"1930": [
+"Australian Wind Waves Ht(m) Prog",
+"12"
+],
+"0800": [
+"Australian Swell Waves Ht(m) Prog (H+24)",
+"00"
+],
+"1945": [
+"Australian Swell Waves Ht(m) Prog (H+24)",
+"12"
+],
+"0830": [
+"South Pacific Ocean MSLP Anal",
+"00"
+],
+"0845": [
+"Australian MSLP Anal (Manual)",
+"06"
+],
+"0900": [
+"Australian MSLP Prog (H+36) (Repeat)",
+"00"
+],
+"0915": [
+"Australian MSLP 4-day forecast, Days 1 and 2 (Repeat)",
+""
+],
+"0930": [
+"Australian MSLP 4 day forecast, Days 3 and-4 (Repeat)",
+""
+],
+"2000": [
+"South Pacific Ocean MSLP Anal (Manual)",
+"12"
+],
+"2015": [
+"Casey Eastern and Western High Seas (H+24)",
+"12"
+],
+"2030": [
+"Australian MSLP Anal (Manual)",
+"18"
+],
+"1015": [
+"Casey Eastern and Western High Seas (H+24)",
+"00"
+],
+"2215": [
+"Casey Eastern and Western High Seas (H+36)",
+"12"
+],
+"1030": [
+"S.H. 500 hPa Prog (H+48)",
+"00"
+],
+"2230": [
+"S.H. 500 hPa Prog (H+48)",
+"12"
+],
+"1045": [
+"S.H. MSLP Prog (H+48)",
+"00"
+],
+"2245": [
+"S.H. MSLP Prog (H+48)",
+"12"
+],
+"1100": [
+"Casey Eastern and Western High Seas (H+36)",
+"00"
+],
+"1115": [
+"S.H. 500 hPa Anal",
+"00"
+],
+"2300": [
+"S.H. 500 hPa Anal",
+"12"
+],
+"2315": [
+"Casey Eastern and Western High Seas (H+48)",
+"12"
+],
+"1130": [
+"Asian Sea Surface Temp Anal (Weekly)",
+""
+],
+"2330": [
+"Australian MSLP Prog (H+36)",
+"00"
+],
+"2345": [
+"Indian Ocean MSLP Prog (H+48)",
+"12"
+],
+"1145": [
+"VMC/VMW Information Notice",
+""
+],
+"0345": [
+"Australian MSLP Anal (Manual) Valid 0000",
+""
+],
+"0500": [
+"Australian MSLP 4-day Forecast, Days 1 and 2",
+""
+],
+"0515": [
+"Australian MSLP 4-day Forecast, Days 3 and 4",
+""
+],
+"0000": [
+"Indian Ocean MSLP Anal (Manual) Valid 1200",
+""
+]
+}
+},
+"WELLINGTONNEWZEALAND": {
+"dated": "JULY 2023 - https://about.me",
+"off_air": true,
+"off_air_text": "stopped broadcasting",
+"times": {}
+},
+"HONOLULUHAWAIIUSA": {
+"dated": "Feb. 12, 2020",
+"off_air": false,
+"off_air_text": "",
+"times": {
+"0519": [
+"TEST PATTERN",
+""
+],
+"1719": [
+"TEST PATTERN",
+""
+],
+"0535": [
+"CYCLONE DANGER AREA",
+"03"
+],
+"1735": [
+"CYCLONE DANGER AREA",
+"15"
+],
+"0555": [
+"STREAMLINE ANALYSIS",
+"00"
+],
+"1755": [
+"STREAMLINE ANALYSIS",
+"12"
+],
+"0615": [
+"SURFACE ANALYSIS",
+"00"
+],
+"1815": [
+"SURFACE ANALYSIS",
+"12"
+],
+"0635": [
+"EAST PACIFIC GOES IR SATELLITE IMAGE",
+"06"
+],
+"1835": [
+"EAST PACIFIC GOES IR SATELLITE IMAGE",
+"18"
+],
+"0649": [
+"SW PACIFIC GOES IR SATELLITE IMAGE",
+"06"
+],
+"1849": [
+"SW PACIFIC GOES IR SATELLITE IMAGE",
+"18"
+],
+"0701": [
+"24HR SURFACE FORECAST",
+"00"
+],
+"1901": [
+"24HR SURFACE FORECAST",
+"12"
+],
+"0714": [
+"48HR SURFACE FORECAST",
+"00"
+],
+"1914": [
+"48HR SURFACE FORECAST",
+"12"
+],
+"0727": [
+"72HR SURFACE FORECAST",
+"00"
+],
+"1927": [
+"72HR SURFACE FORECAST",
+"12"
+],
+"0740": [
+"WIND/WAVE ANALYSIS",
+"00"
+],
+"1940": [
+"WIND/WAVE ANALYSIS",
+"12"
+],
+"0753": [
+"24HR WIND/WAVE FORECAST",
+"00"
+],
+"1953": [
+"24HR WIND/WAVE FORECAST",
+"12"
+],
+"0806": [
+"24HR WIND/WAVE FORECAST",
+"00"
+],
+"2006": [
+"24HR WIND/WAVE FORECAST",
+"12"
+],
+"0816": [
+"48HR SURFACE FORECAST",
+"00"
+],
+"2016": [
+"48HR SURFACE FORECAST",
+"12"
+],
+"0826": [
+"48HR WIND/WAVE FORECAST",
+"00"
+],
+"2026": [
+"48HR WIND/WAVE FORECAST",
+"12"
+],
+"0836": [
+"48/96HR WAVE PERIOD,SWELL DIRECTION",
+"00"
+],
+"2036": [
+"48/96HR WAVE PERIOD,SWELL DIRECTION",
+"12"
+],
+"0846": [
+"rebroadcast/ 96HR SURFACE FORECAST",
+"12"
+],
+"2046": [
+"rebroadcast/ 96HR SURFACE FORECAST",
+"12"
+],
+"0856": [
+"rebroadcast/ 96HR WIND/WAVE FORECAST",
+"12"
+],
+"2056": [
+"rebroadcast/ 96HR WIND/WAVE FORECAST",
+"12"
+],
+"0906": [
+"PACIFIC GOES IR SATELLITE IMAGE",
+"06"
+],
+"2106": [
+"PACIFIC GOES IR SATELLITE IMAGE",
+"18"
+],
+"0917": [
+"SURFACE ANALYSIS (PART 1 NE PACIFIC)",
+"06"
+],
+"2117": [
+"SURFACE ANALYSIS (PART 1 NE PACIFIC)",
+"18"
+],
+"0930": [
+"SURFACE ANALYSIS (PART 2 NW PACIFIC)",
+"06"
+],
+"2130": [
+"SURFACE ANALYSIS (PART 2 NW PACIFIC)",
+"18"
+],
+"0943": [
+"TROPICAL GOES IR SATELLITE IMAGE",
+"06"
+],
+"2143": [
+"TROPICAL GOES IR SATELLITE IMAGE",
+"18"
+],
+"0954": [
+"TROPICAL SURFACE ANALYSIS",
+"06"
+],
+"2154": [
+"TROPICAL SURFACE ANALYSIS",
+"18"
+],
+"1008": [
+"24HR TROPICAL WIND/WAVE FORECAST",
+"00"
+],
+"2208": [
+"24HR TROPICAL WIND/WAVE FORECAST",
+"12"
+],
+"1042": [
+"CYCLONE DANGER AREA",
+"09"
+],
+"2242": [
+"CYCLONE DANGER AREA",
+"21"
+],
+"1102": [
+"48HR WIND/WAVE FORECAST",
+"00"
+],
+"2302": [
+"48HR WIND/WAVE FORECAST",
+"12"
+],
+"1115": [
+"72HR WIND/WAVE FORECAST",
+"00"
+],
+"2315": [
+"72HR WIND/WAVE FORECAST",
+"12"
+],
+"1128": [
+"SEA SURFACE TEMPS",
+""
+],
+"2328": [
+"SEA SURFACE TEMPS",
+""
+],
+"1141": [
+"rebroadcast 24HR WIND/WAVE FORECASTS",
+"00"
+],
+"2341": [
+"rebroadcast 24HR WIND/WAVE FORECASTS",
+"12"
+],
+"1154": [
+"STREAMLINE ANALYSIS",
+"06"
+],
+"2354": [
+"STREAMLINE ANALYSIS",
+"18"
+],
+"1214": [
+"SURFACE ANALYSIS",
+"06"
+],
+"0014": [
+"SURFACE ANALYSIS",
+"18"
+],
+"1234": [
+"EAST PACIFIC GOES IR SATELLITE IMAGE",
+"12"
+],
+"0034": [
+"EAST PACIFIC GOES IR SATELLITE IMAGE",
+"00"
+],
+"1248": [
+"SW PACIFIC GOES IR SATELLITE IMAGE",
+"12"
+],
+"0048": [
+"SW PACIFIC GOES IR SATELLITE IMAGE",
+"00"
+],
+"1300": [
+"SCHEDULE PART I",
+""
+],
+"0100": [
+"SCHEDULE PART I",
+""
+],
+"1320": [
+"SCHEDULE PART II",
+""
+],
+"0120": [
+"SCHEDULE PART II",
+""
+],
+"1340": [
+"SYMBOLS OR PRODUCT NOTICE BULLETIN",
+""
+],
+"0140": [
+"SYMBOLS OR PRODUCT NOTICE BULLETIN",
+""
+],
+"1400": [
+"24HR TROPICAL SURFACE FORECAST",
+"00"
+],
+"0200": [
+"24HR TROPICAL SURFACE FORECAST",
+"12"
+],
+"1410": [
+"48HR TROPICAL SURFACE FORECAST",
+"00"
+],
+"0210": [
+"48HR TROPICAL SURFACE FORECAST",
+"12"
+],
+"1420": [
+"72HR TROPICAL SURFACE FORECAST",
+"00"
+],
+"0220": [
+"72HR TROPICAL SURFACE FORECAST",
+"12"
+],
+"1430": [
+"48/72HR TROPICAL WAVE PERIOD,SWELL DIR",
+"00"
+],
+"0230": [
+"48/72HR TROPICAL WAVE PERIOD,SWELL DIR",
+"00"
+],
+"1440": [
+"TROPICAL SEA STATE ANALYSIS",
+"12"
+],
+"0240": [
+"TROPICAL SEA STATE ANALYSIS",
+"00"
+],
+"1450": [
+"rebroadcast 24HR TROPICAL WIND/WAVE FORECASTS",
+"00"
+],
+"0250": [
+"rebroadcast 24HR TROPICAL WIND/WAVE FORECASTS",
+"12"
+],
+"1500": [
+"48HR TROPICAL WIND/WAVE FORECAST",
+"00"
+],
+"0300": [
+"48HR TROPICAL WIND/WAVE FORECAST",
+"12"
+],
+"1510": [
+"72HR TROPICAL WIND/WAVE FORECAST",
+"00"
+],
+"0310": [
+"72HR TROPICAL WIND/WAVE FORECAST",
+"12"
+],
+"1520": [
+"rebroadcast/SEA STATE ANALYSIS",
+"00"
+],
+"0320": [
+"rebroadcast/SEA STATE ANALYSIS",
+"00"
+],
+"1530": [
+"SURFACE ANALYSIS(PART 1 NE PAC)",
+"12"
+],
+"0330": [
+"SURFACE ANALYSIS(PART 1 NE PAC)",
+"00"
+],
+"1543": [
+"SURFACE ANALYSIS(PART 2 NW PAC)",
+"12"
+],
+"0343": [
+"SURFACE ANALYSIS(PART 2 NW PAC)",
+"00"
+],
+"1556": [
+"TROPICAL SURFACE ANALYSIS",
+"12"
+],
+"0356": [
+"TROPICAL SURFACE ANALYSIS",
+"00"
+]
+}
+},
+"ATHENSGREECE": {
+"dated": "01/2019",
+"off_air": false,
+"off_air_text": "",
+"times": {
+"0845": [
+"SURFACE ANALYSIS",
+"06"
+],
+"0857": [
+"SURFACE PROG (H+42)",
+"06"
+],
+"0909": [
+"SURFACE PROG (H+66)",
+"06"
+],
+"0921": [
+"WAVE HEIGHT PROG (H+30)",
+"18"
+],
+"0933": [
+"WAVE HEIGHT PROG (H+36)",
+"00"
+],
+"0945": [
+"WAVE HEIGHT PROG (H+42)",
+"06"
+],
+"0957": [
+"WAVE HEIGHT PROG (H+48)",
+"12"
+],
+"1009": [
+"WAVE HEIGHT PROG (H+30)",
+"18"
+],
+"1021": [
+"WAVE HEIGHT PROG (H+36)",
+"00"
+],
+"1033": [
+"WAVE HEIGHT PROG (H+42)",
+"06"
+],
+"1044": [
+"WAVE HEIGHT PROG (H+48)",
+"12"
+]
+}
+},
+"MURMANSKRUSSIA": {
+"dated": "",
+"off_air": false,
+"off_air_text": "",
+"times": {
+"0700": [
+"36HR SURFACE PROG",
+"00"
+],
+"0800": [
+"SEA STATE ANALYSIS",
+"06"
+],
+"1400": [
+"SURFACE TEMP ANALYSIS/ICEBERG POSITIONS",
+"12"
+],
+"1430": [
+"24HR SEA STATE PROG",
+"12"
+],
+"1850": [
+"BROADCAST SCHEDULE",
+""
+],
+"2000": [
+"ICEBERG PROGNOSIS",
+""
+]
+}
+},
+"HAMBURGPINNEBERGGERMANY": {
+"dated": "24 July 2024",
+"off_air": false,
+"off_air_text": "",
+"times": {
+"0430": [
+"Surface Analysis North Atlantic, Europe",
+"00"
+],
+"0512": [
+"36HR-forecast surface pressure",
+"00"
+],
+"0525": [
+"weather, ice",
+"00"
+],
+"0638": [
+"Information of tropical storms, North Atlantic (during season only)",
+"03"
+],
+"0651": [
+"12HR, 24HR 500 hPa H+T, surface pressure",
+"00"
+],
+"0704": [
+"12HR, 24HR 850 hPa H+T, 700 hPa relative humidity",
+"00"
+],
+"0717": [
+"Repetition chart 05.12 UTC",
+"00"
+],
+"0730": [
+"48HR-forecast surface pressure",
+"00"
+],
+"0743": [
+"60HR-forecast surface pressure",
+"00"
+],
+"0804": [
+"84HR-forecast surface pressure",
+"00"
+],
+"0817": [
+"108HR-forecast surface pressure",
+"00"
+],
+"0830": [
+"24HR-forecast significant height of combined wind waves and swell, win",
+"00"
+],
+"0842": [
+"48HR-forecast significant height of combined wind waves and swell, win",
+"00"
+],
+"0854": [
+"72HR-forecast significant height of combined wind waves and swell, win",
+"00"
+],
+"0906": [
+"96HR-forecast significant height of combined wind waves and swell, win",
+"00"
+],
+"0930": [
+"36HR, 48HR 500 hPa H+T, surface pressure",
+"00"
+],
+"0945": [
+"Sea surface temperature North Sea",
+"00"
+],
+"1007": [
+"Ice conditions chart Western Baltic Sea or special area if ice situati",
+"00"
+],
+"1029": [
+"48HR wave prediction North Atlantic",
+"00"
+],
+"1050": [
+"Surface Analysis North Atlantic, Europe",
+"06"
+],
+"1111": [
+"36HR, 48HR 850 hPa H+T, 700 hPa relative humidity",
+"00"
+],
+"1123": [
+"60HR, 72HR 500 hPa H+T, surface pressure",
+"00"
+],
+"1135": [
+"60HR, 72HR 850 hPa H+T, 700 hPa relative humidity",
+"00"
+],
+"1236": [
+"Repetition chart 10.50 UTC",
+"06"
+],
+"1256": [
+"Repetition chart 05.12 UTC",
+"00"
+],
+"1308": [
+"Repetition chart 07.30 UTC",
+"00"
+],
+"1320": [
+"Repetition chart 07.43 UTC",
+"00"
+],
+"1332": [
+"Repetition chart 08.04 UTC",
+"00"
+],
+"1344": [
+"Repetition chart 08.17 UTC",
+"00"
+],
+"1356": [
+"Repetition chart 10.50 UTC",
+"06"
+],
+"1425": [
+"Transmission schedule part 1",
+"00"
+],
+"1445": [
+"Transmission schedule part 2",
+"00"
+],
+"1508": [
+"Ice conditions chart Northwest Atlantic, Canadian Ice serv., or int. I",
+"00"
+],
+"1520": [
+"Ice conditions chart Baltic Sea or special area",
+"09"
+],
+"1540": [
+"Ice conditions chart European Arctic Sea or special area",
+"09"
+],
+"1636": [
+"Surface Analysis North Atlantic, Europe",
+"12"
+],
+"1800": [
+"significant weather, ice",
+"12"
+],
+"1821": [
+"Information of tropical storms, North Atlantic (during season only)",
+"15"
+],
+"1834": [
+"36HR-forecast surface pressure",
+"12"
+],
+"1847": [
+"48HR-forecast surface pressure",
+"12"
+],
+"1900": [
+"84HR-forecast surface pressure",
+"00"
+],
+"1913": [
+"24HR-forecast significant height of combined wind waves and swell, win",
+"12"
+],
+"1926": [
+"48HR-forecast significant height of combined wind waves and swell, win",
+"12"
+],
+"1939": [
+"72HR-forecast significant height of combined wind waves and swell, win",
+"12"
+],
+"2100": [
+"Ice conditions chart Northwest Atlantic",
+"12"
+],
+"2115": [
+"Ice conditions chart Baltic Sea or special area",
+"15"
+],
+"2136": [
+"48HR wave prediction Surface weather chart North Atlantic",
+"12"
+],
+"2200": [
+"Surface Analysis North Atlantic, Europe",
+"18"
+]
+}
+},
+"NORTHWOODUNITEDKINGDOM": {
+"dated": "Jan 05, 2022",
+"off_air": false,
+"off_air_text": "",
+"times": {
+"0000": [
+"18Z SFC ANALYSIS",
+"18"
+],
+"1200": [
+"06Z SFC ANALYSIS",
+"06"
+],
+"0012": [
+"18Z SFC PROGNOSIS T+24",
+"18"
+],
+"1212": [
+"06Z SFC PROGNOSIS T+24",
+"06"
+],
+"0024": [
+"18Z PRECIPITATION AND REDUCED VIS",
+"18"
+],
+"1224": [
+"06Z PRECIPITATION AND REDUCED VIS",
+"06"
+],
+"0036": [
+"18Z PRECIPITATION AND REDUCED VIS",
+"18"
+],
+"1236": [
+"06Z PRECIPITATION AND REDUCED VIS",
+"06"
+],
+"0048": [
+"18Z SFC ANALYSIS",
+"18"
+],
+"1248": [
+"06Z SFC ANALYSIS",
+"06"
+],
+"0100": [
+"18Z SFC PROGNOSIS T+24",
+"18"
+],
+"1300": [
+"06Z SFC PROGNOSIS T+24",
+"06"
+],
+"0112": [
+"18Z SEA AND SWELL T+48",
+"18"
+],
+"1312": [
+"06Z SFC WINDS T+24",
+"06"
+],
+"0124": [
+"18Z SEA AND SWELL T+72",
+"18"
+],
+"1324": [
+"06Z GALE WARNING",
+"06"
+],
+"0136": [
+"OCEAN FRONTS",
+""
+],
+"1336": [
+"OCEAN FRONTS",
+""
+],
+"0148": [
+"18Z SEA AND SWELL T+24",
+"18"
+],
+"1348": [
+"06Z SEA AND SWELL T+24",
+"06"
+],
+"0200": [
+"18Z SFC ANALYSIS",
+"18"
+],
+"1400": [
+"00Z SEA SURFACE TEMP",
+"00"
+],
+"0212": [
+"00Z SEA SURFACE TEMP",
+"00"
+],
+"1412": [
+"06Z SFC ANALYSIS",
+"06"
+],
+"0224": [
+"18Z SFC PROGNOSIS T+24",
+"18"
+],
+"1424": [
+"06Z SFC PROGNOSIS T+24",
+"06"
+],
+"0236": [
+"00Z SFC ANALYSIS",
+"00"
+],
+"1436": [
+"12Z SFC ANALYSIS",
+"12"
+],
+"0300": [
+"00Z SFC ANALYSIS",
+"00"
+],
+"1500": [
+"12Z SFC ANALYSIS",
+"12"
+],
+"1512": [
+"00Z ANPS PROGNOSIS T+24",
+"00"
+],
+"0324": [
+"18Z SFC WINDS T+24",
+"18"
+],
+"1524": [
+"00Z ANPS PROGNOSIS T+120",
+"00"
+],
+"0336": [
+"00Z ANPS PROGNOSIS T+24",
+"00"
+],
+"1536": [
+"06Z SEA AND SWELL T+48",
+"06"
+],
+"0348": [
+"00Z ANPS PROGNOSIS T+72",
+"00"
+],
+"0400": [
+"00Z SFC ANALYSIS",
+"00"
+],
+"1600": [
+"12Z SFC ANALYSIS",
+"12"
+],
+"0424": [
+"18Z SFC WINDS T+24",
+"18"
+],
+"1624": [
+"06Z SFC WINDS T+24",
+"06"
+],
+"0436": [
+"00Z SFC PROGNOSIS T+24",
+"00"
+],
+"1636": [
+"12Z SFC PROGNOSIS T+24",
+"12"
+],
+"0448": [
+"18Z SFC WINDS T+48",
+"18"
+],
+"1648": [
+"06Z SFC WINDS T+48",
+"06"
+],
+"0500": [
+"00Z SFC ANALYSIS",
+"00"
+],
+"1700": [
+"12Z SFC ANALYSIS",
+"12"
+],
+"0512": [
+"00Z SFC PROGNOSIS T+24",
+"00"
+],
+"1712": [
+"12Z SFC PROGNOSIS T+24",
+"12"
+],
+"0524": [
+"00Z SFC PROGNOSIS T+48",
+"00"
+],
+"1724": [
+"12Z SFC PROGNOSIS T+48",
+"12"
+],
+"0548": [
+"06Z GALE WARNING",
+"06"
+],
+"1748": [
+"06Z SEA AND SWELL T+72",
+"06"
+],
+"1800": [
+"12Z SFC ANALYSIS",
+"12"
+],
+"0612": [
+"00Z SFC ANALYSIS",
+"00"
+],
+"1812": [
+"12Z SFC PROGNOSIS T+24",
+"12"
+],
+"0624": [
+"00Z SFC PROGNOSIS T+24",
+"00"
+],
+"1824": [
+"12Z SFC ANALYSIS",
+"12"
+],
+"0636": [
+"00Z SFC ANALYSIS",
+"00"
+],
+"1836": [
+"12Z SFC PROGNOSIS T+24",
+"12"
+],
+"0648": [
+"00Z SFC PROGNOSIS T+24",
+"00"
+],
+"1848": [
+"12Z SFC ANALYSIS",
+"12"
+],
+"0700": [
+"00Z SFC ANALYSIS",
+"00"
+],
+"1900": [
+"12Z SFC PROGNOSIS T+24",
+"12"
+],
+"0712": [
+"00Z SFC PROGNOSIS T+24",
+"00"
+],
+"0724": [
+"00Z SFC PROGNOSIS T+48",
+"00"
+],
+"1924": [
+"12Z SFC PROGNOSIS T+48",
+"12"
+],
+"0736": [
+"00Z SFC PROGNOSIS T+72",
+"00"
+],
+"1936": [
+"12Z SFC PROGNOSIS T+72",
+"12"
+],
+"0748": [
+"00Z SFC PROGNOSIS T+96",
+"00"
+],
+"1948": [
+"12Z SFC PROGNOSIS T+96",
+"12"
+],
+"0800": [
+"00Z SFC PROGNOSIS T+120",
+"00"
+],
+"0812": [
+"00Z SFC PROGNOSIS T+48",
+"00"
+],
+"2012": [
+"12Z SFC PROGNOSIS T+120",
+"12"
+],
+"0824": [
+"00Z PRECIPITATION AND REDUCED VIS",
+"00"
+],
+"2024": [
+"12Z SFC PROGNOSIS T+48",
+"12"
+],
+"0836": [
+"00Z PRECIPITATION AND REDUCED VIS",
+"00"
+],
+"2036": [
+"12Z PRECIPITATION AND REDUCED VIS",
+"12"
+],
+"0848": [
+"00Z SFC PROGNOSIS T+24",
+"00"
+],
+"2048": [
+"12Z SFC PROGNOSIS T+24",
+"12"
+],
+"0900": [
+"06Z SFC ANALYSIS",
+"06"
+],
+"2100": [
+"18Z SFC ANALYSIS",
+"18"
+],
+"2112": [
+"12Z PRECIPITATION AND REDUCED VIS",
+"12"
+],
+"0924": [
+"00Z ANPS PROGNOSIS T+24",
+"00"
+],
+"2124": [
+"00Z ANPS PROGNOSIS T+24",
+"00"
+],
+"0936": [
+"00Z ANPS PROGNOSIS T+120",
+"00"
+],
+"2136": [
+"00Z ANPS PROGNOSIS T+120",
+"00"
+],
+"1000": [
+"06Z SFC ANALYSIS",
+"06"
+],
+"2200": [
+"18Z SFC ANALYSIS",
+"18"
+],
+"1012": [
+"06Z SFC PROGNOSIS T+24",
+"06"
+],
+"2212": [
+"18Z SFC PROGNOSIS T+24",
+"18"
+],
+"1036": [
+"00Z ANPS PROGNOSIS T+24",
+"00"
+],
+"2236": [
+"00Z ANPS PROGNOSIS T+24",
+"00"
+],
+"1100": [
+"06Z SFC ANALYSIS",
+"06"
+],
+"2300": [
+"18Z SFC ANALYSIS",
+"18"
+],
+"1112": [
+"06Z SFC PROGNOSIS T+24",
+"06"
+],
+"2312": [
+"18Z SFC PROGNOSIS T+24",
+"18"
+],
+"1124": [
+"06Z SEA AND SWELL T+24",
+"06"
+],
+"2324": [
+"18Z SEA AND SWELL T+24",
+"18"
+],
+"1136": [
+"06Z SFC PROGNOSIS T+24",
+"06"
+],
+"2336": [
+"18Z SFC PROGNOSIS T+24",
+"18"
+],
+"1148": [
+"06Z SEA AND SWELL T+24",
+"06"
+],
+"2348": [
+"18Z SEA AND SWELL T+24",
+"18"
+]
+}
+},
+"VALPARAISOPLAYAANCHACHILE/CBV": {
+"dated": "Sep 23, 2010",
+"off_air": false,
+"off_air_text": "",
+"times": {
+"1100": [
+"TEST CHART CBV CBM SCHEDULES",
+""
+],
+"1115": [
+"SURFACE CHART",
+"06"
+],
+"1130": [
+"SATELLITE IMAGE",
+"09"
+],
+"1630": [
+"24 HR SURFACE FORECAST",
+"12"
+],
+"1645": [
+"SATELLITE IMAGE",
+"15"
+],
+"1915": [
+"SURFACE CHART",
+"12"
+],
+"1930": [
+"SATELLITE IMAGE",
+"18"
+],
+"2200": [
+"36 HR SURFACE FORECAST",
+"00"
+],
+"2215": [
+"SURFACE CHART",
+"18"
+],
+"2230": [
+"WINDS BARB ISOTACHS FORECAST",
+"12"
+],
+"2310": [
+"48 HR SURFACE FORECAST",
+"12"
+],
+"2325": [
+"SATELLITE IMAGE",
+"21"
+]
+}
+},
+"CHARLEVILLEAUSTRALIA/VMW": {
+"dated": "Apr 20, 2022",
+"off_air": false,
+"off_air_text": "",
+"times": {
+"1200": [
+"Australian MSLP Prog (H+36)",
+"12"
+],
+"0015": [
+"VMC/VMW Schedule Page 1 of 2",
+""
+],
+"1215": [
+"VMC/VMW Schedule Page 1 of 2",
+""
+],
+"0030": [
+"VMC/VMW Schedule Page 2 of 2",
+""
+],
+"1230": [
+"VMC/VMW Schedule Page 2 of 2",
+""
+],
+"0045": [
+"VMC/VMW Information Notice",
+""
+],
+"0100": [
+"IPS Recommended Frequencies for VMC (Charleville)",
+""
+],
+"0130": [
+"IPS RECOMMENDED FREQUENCIES FOR VMW",
+""
+],
+"1245": [
+"Indian Ocean MSLP Prog (H+36)",
+"12"
+],
+"1315": [
+"South Pacific Ocean Total Waves (H+48)",
+"00"
+],
+"1330": [
+"Indian Ocean Total Waves (H+48)",
+"00"
+],
+"1345": [
+"Pacific Ocean Sea Surface Temps (Weekly)",
+""
+],
+"1400": [
+"Indian Ocean Sea Surface Temps (Weekly)",
+""
+],
+"0200": [
+"Australian MSLP Prog (H+36)",
+"00"
+],
+"1415": [
+"Casey Eastern and Western High Seas (H+48)",
+"00"
+],
+"0245": [
+"Australian MSLP Anal (Manual)",
+"00"
+],
+"1430": [
+"Australian MSLP Anal (Manual)",
+"12"
+],
+"0300": [
+"Australian 500 hPa Anal",
+"00"
+],
+"1500": [
+"Australian 500 hPa Anal",
+"12"
+],
+"0315": [
+"Voice Broadcast Information for VMW (Wiluna) and VMC (Charleville)",
+""
+],
+"1515": [
+"Australian MSLP Prog ( H+36)",
+"12"
+],
+"0400": [
+"Australian 500 hPa (H+24) Prog",
+"00"
+],
+"0430": [
+"Australian MSLP 4 day forecast, Days 1 and-2",
+""
+],
+"1530": [
+"Australian MSLP 4 day forecast, Days 1 and-2",
+""
+],
+"0445": [
+"Australian MSLP 4 day forecast, Days 3 and-4",
+""
+],
+"1545": [
+"Australian MSLP 4 day forecast, Days 3 and-4",
+""
+],
+"1600": [
+"Australian 500 hPa (H+24) Prog",
+"12"
+],
+"1630": [
+"IPS Recommended Frequencies for VMC (Charleville)",
+""
+],
+"1700": [
+"IPS Recommended Frequencies for VMW (Wiluna)",
+""
+],
+"0600": [
+"Asian (Part A) Gradient Level Wind Anal (Manual)",
+"00"
+],
+"1800": [
+"Asian (Part A) Gradient Level Wind Anal (Manual)",
+"12"
+],
+"0623": [
+"Asian (Part B) Gradient Level Wind Anal (Manual)",
+"00"
+],
+"1823": [
+"Asian (Part B) Gradient Level Wind Anal (Manual)",
+"12"
+],
+"0645": [
+"",
+""
+],
+"0730": [
+"Indian Ocean MSLP Anal (Manual)",
+"00"
+],
+"1915": [
+"Indian Ocean MSLP Anal (Manual)",
+"12"
+],
+"0745": [
+"Australian Wind Waves Ht(m) Prog",
+"00"
+],
+"1930": [
+"Australian Wind Waves Ht(m) Prog",
+"12"
+],
+"0800": [
+"Australian Swell Waves Ht(m) Prog (H+24)",
+"00"
+],
+"1945": [
+"Australian Swell Waves Ht(m) Prog (H+24)",
+"12"
+],
+"0830": [
+"South Pacific Ocean MSLP Anal",
+"00"
+],
+"0845": [
+"Australian MSLP Anal (Manual)",
+"06"
+],
+"0900": [
+"Australian MSLP Prog (H+36) (Repeat)",
+"00"
+],
+"0915": [
+"Australian MSLP 4-day forecast, Days 1 and 2 (Repeat)",
+""
+],
+"0930": [
+"Australian MSLP 4 day forecast, Days 3 and-4 (Repeat)",
+""
+],
+"2000": [
+"South Pacific Ocean MSLP Anal (Manual)",
+"12"
+],
+"2015": [
+"Casey Eastern and Western High Seas (H+24)",
+"12"
+],
+"2030": [
+"Australian MSLP Anal (Manual)",
+"18"
+],
+"1015": [
+"Casey Eastern and Western High Seas (H+24)",
+"00"
+],
+"2215": [
+"Casey Eastern and Western High Seas (H+36)",
+"12"
+],
+"1030": [
+"S.H. 500 hPa Prog (H+48)",
+"00"
+],
+"2230": [
+"S.H. 500 hPa Prog (H+48)",
+"12"
+],
+"1045": [
+"S.H. MSLP Prog (H+48)",
+"00"
+],
+"2245": [
+"S.H. MSLP Prog (H+48)",
+"12"
+],
+"1100": [
+"Casey Eastern and Western High Seas (H+36)",
+"00"
+],
+"1115": [
+"S.H. 500 hPa Anal",
+"00"
+],
+"2300": [
+"S.H. 500 hPa Anal",
+"12"
+],
+"2315": [
+"Casey Eastern and Western High Seas (H+48)",
+"12"
+],
+"1130": [
+"Asian Sea Surface Temp Anal (Weekly)",
+""
+],
+"2330": [
+"Australian MSLP Prog (H+36)",
+"00"
+],
+"2345": [
+"Indian Ocean MSLP Prog (H+48)",
+"12"
+],
+"1145": [
+"VMC/VMW Information Notice",
+""
+]
+}
+}
+},
+"source": "https://www.weather.gov/media/marine/rfax.pdf"
+}

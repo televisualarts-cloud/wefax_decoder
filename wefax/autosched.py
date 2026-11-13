@@ -110,6 +110,9 @@ DECODE_WAIT_MAX_S = 20 * 60  # longest wait for a decode before an item is logge
 HOLD_MAX_S = 25 * 60  # a recording longer than any single chart is ended for the next planned one
 RETRY_BONUS = 2000   # repeat of a priority chart whose first try failed: beats any other chart
 GOOD_QUALITY = 0.6   # decode quality that counts as 'collected'
+EMPTY_CARRIER_SNR = 5.0  # nothing at all decoded although the signal stood this far above the noise
+                         # (dB): the station was on air but did not send this chart (a carrier
+                         # between charts) - the slot is empty, the frequency did not fail
 EMPTY_SLOT_SNR = -6.0    # a failed slot with no signal at all (dB) ...
 EMPTY_SLOT_S = 45 * 60   # ... followed this soon by a good decode on the same frequency was
                          # simply not transmitted: it says nothing about propagation
@@ -359,6 +362,20 @@ class PropLog:
             return
         q = float(r.get("quality") or 0.0)
         kind = r.get("kind")
+        snr0 = r.get("snr_db")
+        if kind in ("core", "dx") and q == 0.0 and snr0 is not None and float(snr0) >= EMPTY_CARRIER_SNR:
+            # a strong signal and nothing decoded at all: the path was open and the
+            # station on air, but this chart was not sent (DWD keeps a carrier up
+            # between charts; some listed slots are never used).  Evidence that the
+            # slot is empty - not a failure of the frequency, whose signal counts
+            # in its favour - and not a chart to chase repeats of.
+            ts = when.timestamp()
+            st["scan"] = (st.get("scan", []) + [(ts, float(snr0))])[-60:]
+            sk = (r["short"], r.get("slot"))
+            if sk[1]:
+                self.slot_last[sk] = max(ts, self.slot_last.get(sk, 0.0))
+                self.slot_gaps[sk] = self.slot_gaps.get(sk, 0) + 1
+            return
         # a priority-station chart received off-plan is judged like a planned one
         core = kind == "core" or (kind == "manual" and r["short"] in CORE) if kind else r["short"] in CORE
         good = q >= (GOOD_QUALITY if core else DX_GOOD_QUALITY)
@@ -1244,9 +1261,15 @@ class AutoScheduler:
             return True
         self.held.append((rec, suspect, now))
         n = sum(1 for _, sus, _ in self.held if sus)
+        stations = {r["short"] for r, sus, _ in self.held if sus}
+        if n >= AUDIO_FAULT_COUNT and len(stations) < 2:
+            # all on one station: that station sending carrier between charts
+            # (empty slots), not the audio path - count them as such
+            self._flush_held()
+            return False
         if n >= AUDIO_FAULT_COUNT:
             self.audio_fault = True
-            self.logf(f"auto: WARNING - {n} slots in a row with a strong signal (SNR >= "
+            self.logf(f"auto: WARNING - {n} slots in a row on {len(stations)} stations with a strong signal (SNR >= "
                       f"{AUDIO_SUSPECT_SNR:+.0f} dB) but no fax decoded: the audio reaching the decoder "
                       f"looks broken (check the virtual audio cable / input). Results are not counted "
                       f"against the frequencies until a fax decodes again.")
