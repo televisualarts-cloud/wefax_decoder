@@ -53,6 +53,7 @@ class Detector:
         self.rec_meta: dict = {}
         self.start_run = 0
         self.start_kind = None
+        self.true_start_run = 0     # start blocks that really carry the tone (see SPLIT_TONE_FRAC)
         self.stop_run = 0
         self.invalid_run = 0
         self.phase_hits = 0
@@ -139,6 +140,15 @@ class Detector:
         else:
             self.start_run = 0
             self.start_kind = None
+        # The spectral-line test in classify_block also fires on sharp, clean
+        # chart detail (title lettering, legend boxes: 300 Hz energy but no
+        # tone, tone fraction 0.00-0.03 against ~0.8 for a real start tone).
+        # Splitting a chart in progress needs blocks that really carry the tone.
+        if label.startswith("start") and \
+                feats[300.0 if label == "start576" else 675.0] >= self.SPLIT_TONE_FRAC:
+            self.true_start_run += 1
+        else:
+            self.true_start_run = 0
 
         if self.state == "idle":
             self.pre.append(a)
@@ -187,7 +197,7 @@ class Detector:
                 if self._tail <= 0:
                     self._tail = None
                     self._finish("stop tone")
-            elif self.start_run >= 8 and elapsed > split_tone_s:
+            elif self.start_run >= 8 and self.true_start_run >= 8 and elapsed > split_tone_s:
                 seed = self.rec_tail_for_restart
                 ioc = 576 if self.start_kind == "start576" else 288
                 self.rec = self.rec[:-len(seed)]
@@ -256,6 +266,9 @@ class Detector:
                 s["ends_by"] = round(self.deadline[0])
         return s
 
+    SPLIT_TONE_FRAC = 0.1  # tone fraction a block needs to count towards a mid-chart split
+                           # (picture detail <= 0.03; a real start tone >= 0.2 even when very noisy;
+                           # a real one missed here is still caught by the phasing split)
     SPLIT_MIN_S = 150     # earliest point in a recording to look for the next chart's phasing
     SPLIT_HITS = 5        # consecutive 1 s phasing checks needed to split
     SPLIT_SEED_S = 20.0   # audio before the detection carried into the new recording

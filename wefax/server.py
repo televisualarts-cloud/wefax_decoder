@@ -188,6 +188,16 @@ def make_handler(hub: Hub):
                     return self._send(400, b'{"error":"days must be 3, 7, 14 or 28"}', "application/json")
                 hub.save_setting("keep_days", days)
                 return self._send(200, json.dumps({"ok": True, "days": days}).encode(), "application/json")
+            if path == "/api/schedule/choose":
+                if hub.auto is None:
+                    return self._send(409, b'{"error":"no scheduler"}', "application/json")
+                try:
+                    hub.auto.choose(str(body.get("row") or ""), body.get("pick") or None)
+                except ValueError as e:
+                    return self._send(409, json.dumps({"error": str(e)}).encode(), "application/json")
+                except Exception as e:
+                    return self._send(400, json.dumps({"error": f"bad choice ({e})"}).encode(), "application/json")
+                return self._send(200, b'{"ok":true}', "application/json")
             if path == "/api/station":
                 hub.settings["station"] = body.get("station") or None
                 return self._send(200, json.dumps({"ok": True, **hub.settings}).encode(), "application/json")
@@ -218,6 +228,19 @@ def make_handler(hub: Hub):
                 st = hub.auto.status() if hub.auto else {"enabled": False, "plan": []}
                 st["cat"] = hub.cat_on()
                 self._send(200, json.dumps(st).encode(), "application/json")
+            elif path == "/api/schedule":
+                # the plan up to midnight UTC (?range=24h: the next 24 hours)
+                from datetime import datetime, timedelta, timezone
+                if hub.auto is None:
+                    return self._send(200, b'{"items":[],"enabled":false}', "application/json")
+                now = datetime.now(timezone.utc)
+                if "range=24h" in self.path:
+                    until = now + timedelta(hours=24)
+                else:
+                    until = now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+                out = {"items": hub.auto.schedule(until), "enabled": hub.auto.enabled,
+                       "until": until.strftime("%Y-%m-%d %H:%MZ"), "now": now.strftime("%H:%MZ")}
+                self._send(200, json.dumps(out, default=str).encode(), "application/json")
             elif path == "/api/proplog":
                 from datetime import datetime, timezone
                 rows = hub.auto.proplog.summary(hub.auto.planner.qth, datetime.now(timezone.utc)) if hub.auto else []

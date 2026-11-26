@@ -153,6 +153,31 @@
   .live.rx { border-color: var(--rx); cursor: pointer; }
   .live.rx .cap { color: var(--rx); }
   .live.sel { box-shadow: 0 0 0 1px var(--accent); }
+  /* today's schedule pop-up */
+  #schedPop { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 50; display: flex;
+    align-items: flex-start; justify-content: center; padding: 5vh 2vw; }
+  #schedPop .box { background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    width: min(1500px, 96vw); max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 10px 40px #000a; }
+  #schedPop .hd { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--line);
+    font: 600 18px var(--mono); }
+  #schedPop .hd small { font-weight: 400; color: var(--dim); }
+  #schedPop .bd { overflow: auto; padding: 4px 0 10px; }
+  #schedPop table { width: 100%; border-collapse: collapse; font: 16px var(--mono); table-layout: fixed; }
+  #schedPop col.c1 { width: 8.5em; } #schedPop col.c2 { width: 4em; } #schedPop col.c3 { width: 17%; }
+  #schedPop col.c4 { width: 22%; } #schedPop col.c6 { width: 8em; }
+  #schedPop th { position: sticky; top: 0; background: var(--panel); text-align: left; color: var(--dim);
+    font-weight: 400; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  #schedPop td { padding: 5px 8px; border-bottom: 1px solid #1a2028; vertical-align: middle; }
+  #schedPop tr.core td.k { color: var(--rx); }
+  #schedPop tr.dx td.k { color: var(--busy); }
+  #schedPop tr.tuned td { background: #173022; }
+  #schedPop tr.done td, #schedPop tr.closing td, #schedPop tr.skipped td { opacity: .45; }
+  #schedPop tr.manual td.t::after { content: " \270B"; }
+  #schedPop select { font: 16px var(--mono); color: #fff; background: #171c23; border: 1px solid var(--line);
+    border-radius: 4px; padding: 3px 5px; width: 100%; }
+  #schedPop select.manual { border-color: var(--accent); }
+  #schedPop .msg { color: var(--bad); padding: 0 14px; font: 16px var(--mono); }
+  #schedPop .note { color: var(--dim); padding: 8px 14px 0; font: 15px var(--mono); }
 </style>
 </head>
 <body>
@@ -172,6 +197,19 @@
   <label class="prio">QTH <input id="inQth" spellcheck="false" placeholder="lat, lon or IO70ri"
     title="Your location for the propagation model: latitude, longitude in decimal degrees (south and west negative), or a Maidenhead locator. Press Enter to apply."></label>
   <label class="prio">Keep <select id="selKeep" title="Faxes older than this are deleted in a quiet moment after midnight (the station copies are always kept)"></select></label>
+</div>
+<div id="schedPop" hidden role="dialog" aria-modal="true" aria-labelledby="schedTitle">
+  <div class="box">
+    <div class="hd"><span id="schedTitle">SCHEDULE</span><small id="schedSub"></small><span class="spacer"></span>
+      <span class="seg" role="group" aria-label="Range"><button id="bSchToday" class="on">Today</button><button id="bSch24">Next 24 h</button></span>
+      <button id="bSchClose" title="Close (Esc)">Close</button></div>
+    <div class="msg" id="schedMsg"></div>
+    <div class="bd"><table><colgroup><col class="c1"><col class="c2"><col class="c3"><col class="c4"><col><col class="c6"></colgroup><thead><tr><th>UTC</th><th></th><th>Station</th><th>Chart</th><th>Frequency / target</th><th>State</th></tr></thead>
+      <tbody id="schedBody"></tbody></table>
+      <div class="note">Core = your 1st/2nd priority charts; DX = distant stations hunted in the gaps. A choice made here (&#9995;) is kept:
+        a core chart is received on the chosen frequency (no frequency scan), a DX choice becomes the first choice for its time.
+        A chart received from a choice goes into the learning log; a miss is not counted. % = expected chance of a good copy.</div></div>
+  </div>
 </div>
 <div class="page">
 <aside>
@@ -196,6 +234,7 @@
     <div style="flex-basis:100%;height:0"></div>
     <button id="bAuto" title="Auto-schedule: tune SDR Console to the most important charts of your 1st and 2nd priority stations, DX in the gaps">AUTO</button>
     <span id="autoMsg"></span>
+    <button id="bSched" title="Today's schedule: every planned chart and DX attempt in time order - choose another frequency or DX target">SCHEDULE</button>
     <span title="What the auto-scheduler will tune, in order">AUTO PLAN</span><span id="nextBig" hidden></span><div class="chips" id="plan"></div>
   </div>
   <div class="toolbar">
@@ -205,7 +244,8 @@
     </span>
     <button id="bEnh" class="on">Enhanced</button>
     <button id="bRaw">Raw</button>
-    <button id="bFit" class="on">Fit</button>
+    <button id="bFitW" title="Fit the chart to the width of the window (remembered)">Fit width</button>
+    <button id="bFitH" title="Fit the chart to the height of the window, but never narrower than half the window width (remembered)">Fit height</button>
     <button id="b11">1:1</button>
     <button id="bRotL" title="Rotate the fax 90&deg; anticlockwise">Rotate &minus;90&deg;</button>
     <button id="bRot" title="Rotate the fax 90&deg; clockwise">Rotate +90&deg;</button>
@@ -226,6 +266,12 @@ function liveMeta() {
 }
 // live panel: IDLE (red) / NO SIGNAL with incoming noise (orange) / receiving (green)
 let liveMode = 'idle', imgMode = null, lastStatus = {};
+// the Live / Last received choice, remembered in this browser:
+//  'live' - show the fax being received whenever one is coming in, otherwise the newest fax
+//  'last' - always show the newest fax
+//  ''     - neither (a thumbnail was picked): stay on what was picked
+let viewPref = (() => { try { const v = localStorage.getItem('wefaxView'); return v === 'live' || v === 'last' ? v : ''; } catch (e) { return ''; } })();
+function setPref(v) { viewPref = v; try { localStorage.setItem('wefaxView', v); } catch (e) {} }
 const slotTxt = w => w ? `${esc((w.short || '').split(/\s+/)[0])} ${w.slot ? w.slot.slice(0, 2) + ':' + w.slot.slice(2) + 'UT' : ''}` : '';
 function liveState(s) {
   if (s.state === 'receiving') return s.faded ? 'rxfade' : 'rx';
@@ -245,7 +291,8 @@ function paintLive() {
   else if (liveMode === 'rxfade') { cap.hidden = false; cap.innerHTML = `still listening${s.watch ? ' \u00B7 ' + slotTxt(s.watch) : ''}`; }
   else if (liveMode === 'nosig') { cap.hidden = false; cap.innerHTML = `expected: ${slotTxt(s.watch)}`; cap.title = s.watch.contents || ''; }
   else { cap.hidden = true; }
-  if (liveSel && liveMode === 'idle') { liveSel = false; show(cur || faxes[0]); }
+  if (liveSel && liveMode === 'idle') { liveSel = false; show(viewPref ? faxes[0] : (cur || faxes[0])); }
+  else if (viewPref === 'live' && liveMode === 'rx' && !liveSel) { showLive(); return; }   // a chart has started
   syncSwitch();
 }
 function showLive() {
@@ -266,17 +313,24 @@ function onLive(info) {
   paintLive();
   if (liveSel && !$('live').classList.contains('idle')) showLive();
 }
-$('live').onclick = showLive;
+function chooseLive() {
+  setPref('live');
+  if (liveMode !== 'idle') showLive();
+  else { if (!isToday()) { dayMs = utcDay(Date.now()); renderGallery(); } show(faxes[0]); }   // nothing on air: newest until a chart starts
+}
+$('live').onclick = chooseLive;
 // the Live / Last received switch follows whatever is on view, however it was chosen
 function syncSwitch() {
   const idle = liveMode === 'idle';
   const bl = $('bLive');
-  bl.disabled = idle && !liveSel;
-  bl.title = idle ? 'Nothing is being received at the moment' : 'Show the fax being received now (or click the live panel at the top left)';
-  bl.classList.toggle('on', liveSel);
+  bl.title = 'Always show the fax being received (the newest fax while nothing is coming in) - remembered' +
+             (idle ? '. Nothing is being received at the moment' : '');
+  bl.classList.toggle('on', liveSel || viewPref === 'live');
   bl.classList.toggle('nosig', liveSel && liveMode !== 'rx');
   $('bLast').disabled = !faxes.length;
-  $('bLast').classList.toggle('on', !liveSel && !!cur && !!faxes.length && cur.id === faxes[0].id);
+  $('bLast').title = 'Always show the fax received most recently - remembered';
+  $('bLast').classList.toggle('on', viewPref === 'last' ||
+    (!viewPref && !liveSel && !!cur && !!faxes.length && cur.id === faxes[0].id));
 }
 function showLast() {
   if (!faxes.length) return;
@@ -284,8 +338,8 @@ function showLast() {
   $('strip').scrollTop = 0;
   show(faxes[0]);
 }
-$('bLive').onclick = showLive;
-$('bLast').onclick = showLast;
+$('bLive').onclick = chooseLive;
+$('bLast').onclick = () => { setPref('last'); showLast(); };
 $('liveImg').addEventListener('load', () => {
   const im = $('liveImg');
   im.classList.toggle('full', im.offsetHeight > $('live').clientHeight);
@@ -346,7 +400,7 @@ function renderGallery() {
     const p = f.product || {};
     const tip = [p.contents, p.valid ? p.valid + 'Z run' : '', 'received ' + fmtUTC(f.utc)].filter(Boolean).join(' - ');
     d.innerHTML = `<img loading="lazy" src="/faxes/${f.files.thumb}" alt=""><div title="${esc(tip)}">${thumbLabel(f)}</div>`;
-    d.onclick = () => show(f);
+    d.onclick = () => { setPref(''); show(f); syncSwitch(); };   // picking a chart ends Live / Last received
     g.appendChild(d);
   }
   if (!day.length) {
@@ -374,6 +428,7 @@ async function load(selectNewest) {
     faxes.sort((a, b) => (b.utc || '').localeCompare(a.utc || ''));
     renderGallery();
     if (liveSel) return;
+    if (viewPref) { if (!isToday()) { dayMs = utcDay(Date.now()); renderGallery(); } show(faxes[0]); return; }
     if (selectNewest && !isToday() && cur) selectNewest = false;   // don't jump while browsing another day
     if (selectNewest || !cur) show(faxes[0]);
     else show(faxes.find(f => f.id === cur.id) || faxes[0]);
@@ -384,10 +439,15 @@ function setVariant(v) { variant = v; $('bEnh').classList.toggle('on', v === 'en
 // zoom is kept in 'enhanced-image pixels' (2 x the fax line width), so Raw
 // and Enhanced always show the same part of the chart at the same size
 let fitMode = true, zoom = 1, rot = 0;
+// which fit the Fit buttons (and every newly shown fax) use: 'width' or 'height', remembered
+let fitKind = (() => { try { return localStorage.getItem('wefaxFit') === 'height' ? 'height' : 'width'; } catch (e) { return 'width'; } })();
+const FIT_H_MIN_W = 0.5;  // fit height never makes the chart narrower than this share of the window
 function refK() {        // reference pixels per pixel of the image on screen
   const nw = $('img').naturalWidth || 1;
   const fw = (!liveSel && cur && cur.meta && cur.meta.width) ? cur.meta.width * 2 : nw;
-  return fw / nw;
+  // an enhanced copy trimmed to the chart (Boston): scale by its untrimmed width
+  const trim = !liveSel && cur && variant === 'enhanced' && cur.enhance && cur.enhance.trim;
+  return fw / (trim ? trim.full_w : nw);
 }
 const rots = (() => { try { return JSON.parse(localStorage.getItem('wefaxRot') || '{}'); } catch (e) { return {}; } })();
 function saveRots() { try { localStorage.setItem('wefaxRot', JSON.stringify(rots)); } catch (e) {} }
@@ -395,15 +455,29 @@ function dims() {
   const im = $('img'), nw = im.naturalWidth || 1, nh = im.naturalHeight || 1;
   return rot % 180 ? [nh, nw, nw, nh] : [nw, nh, nw, nh];   // rotated w/h, natural w/h
 }
-function fitScale() {     // in reference units
+function fitWidthScale() {     // in reference units
   const [rw] = dims();
   return Math.min($('viewer').clientWidth, 1810) / (rw * refK());
+}
+function fitScale() {
+  const w = fitWidthScale();
+  if (fitKind !== 'height') return w;
+  const [rw, rh] = dims(), v = $('viewer'), k = refK();
+  const h = v.clientHeight / (rh * k);
+  const floor = FIT_H_MIN_W * v.clientWidth / (rw * k);    // a long chart would get too narrow to read
+  return Math.min(w, Math.max(h, floor));
 }
 function layout() {
   const im = $('img');
   if (im.hidden || !im.naturalWidth) return;
-  const [rw, rh, nw, nh] = dims();
   if (fitMode) zoom = fitScale();
+  layoutAt();
+  // the scrollbars may have come or gone with the new size: fit once more
+  if (fitMode) { const z = fitScale(); if (Math.abs(z - zoom) > 1e-9) { zoom = z; layoutAt(); } }
+}
+function layoutAt() {
+  const im = $('img');
+  const [rw, rh, nw, nh] = dims();
   const scale = zoom * refK();              // screen px per image px
   const W = nw * scale, H = nh * scale;
   im.style.width = W + 'px'; im.style.height = H + 'px';
@@ -411,10 +485,16 @@ function layout() {
              270: `translate(0,${W}px) rotate(270deg)`}[rot];
   im.style.transform = t;
   $('stage').style.width = rw * scale + 'px'; $('stage').style.height = rh * scale + 'px';
-  $('bFit').classList.toggle('on', fitMode); $('b11').classList.toggle('on', !fitMode && Math.abs(zoom - 1) < 1e-6);
+  $('bFitW').classList.toggle('on', fitMode && fitKind === 'width');
+  $('bFitH').classList.toggle('on', fitMode && fitKind === 'height'); $('b11').classList.toggle('on', !fitMode && Math.abs(zoom - 1) < 1e-6);
   $('viewer').classList.toggle('pan', !fitMode);
 }
 function setZoom(fit) { fitMode = fit; if (!fit) zoom = 1; layout(); }
+function setFit(kind) {
+  fitKind = kind;
+  try { localStorage.setItem('wefaxFit', kind); } catch (e) {}
+  setZoom(true);
+}
 function zoomAt(newZoom, mx, my) {        // keep the point under the mouse still
   const v = $('viewer'), st = $('stage');
   const fx = (v.scrollLeft + mx - st.offsetLeft) / st.offsetWidth;
@@ -463,7 +543,8 @@ $('bRot').onclick = () => { if (!liveSel && cur) setRot((rot + 90) % 360); };
 $('bRotL').onclick = () => { if (!liveSel && cur) setRot((rot + 270) % 360); };
 $('bEnh').onclick = () => setVariant('enhanced');
 $('bRaw').onclick = () => setVariant('raw');
-$('bFit').onclick = () => setZoom(true);
+$('bFitW').onclick = () => setFit('width');
+$('bFitH').onclick = () => setFit('height');
 $('b11').onclick = () => setZoom(false);
 
 let lastState = null;
@@ -601,7 +682,8 @@ function drawSpec() {
 function connect() {
   const es = new EventSource('/events');
   es.addEventListener('status', e => status(JSON.parse(e.data)));
-  es.addEventListener('fax', () => { if (liveSel) liveSel = false; load(true); });
+  // a new fax is shown at once, unless Live is chosen and the next chart is already coming in
+  es.addEventListener('fax', () => { if (!(viewPref === 'live' && liveMode === 'rx')) liveSel = false; load(true); });
   es.addEventListener('live', e => onLive(JSON.parse(e.data)));
   es.addEventListener('spec', e => onSpec(JSON.parse(e.data)));
   es.onerror = () => { $('state').className = 'pill offline'; $('state').textContent = 'OFFLINE'; };
@@ -862,6 +944,62 @@ $('bAuto').onclick = async () => {
 };
 setInterval(loadPlan, 10000);
 loadPlan();
+// ---------------- today's schedule pop-up ----------------
+let schedRange = 'today', schedOpen = false, schedBusy = false;
+const stName = (short, name) => esc(name && name.length < 34 ? name : short);
+async function loadSched() {
+  if (!schedOpen || schedBusy) return;
+  let j;
+  try { j = await (await fetch('/api/schedule' + (schedRange === '24h' ? '?range=24h' : ''))).json(); }
+  catch (e) { $('schedMsg').textContent = 'could not load the schedule'; return; }
+  if (document.activeElement && document.activeElement.tagName === 'SELECT' && $('schedPop').contains(document.activeElement)) return;
+  $('schedSub').textContent = `now ${j.now} \u00B7 until ${j.until}${j.enabled ? '' : ' \u00B7 AUTO is OFF'}`;
+  const rows = (j.items || []).map(x => {
+    let ch;
+    const edit = x.state === 'planned' && x.alts && (x.alts.length > 1 || x.manual);
+    if (edit) {
+      const opts = x.alts.map(a => {
+        const lab = x.kind === 'core'
+          ? `${a.khz} kHz \u00B7 ${a.pct}%`
+          : `${a.start} ${a.name && a.name.length < 34 ? a.name : a.station} ${a.khz} kHz \u00B7 ${a.pct}%${a.backoff ? ' \u00B7 backed off' : ''}${a.unlikely ? ' \u00B7 path unlikely' : ''} \u00B7 ${a.contents}`;
+        return `<option value="${esc(a.pick)}"${a.current ? ' selected' : ''}>${esc(lab)}</option>`;
+      });
+      if (x.manual) opts.push(`<option value="">\u21BA automatic choice</option>`);
+      ch = `<select data-row="${esc(x.id)}" class="${x.manual ? 'manual' : ''}" title="${x.kind === 'core' ? 'Frequencies this chart is sent on' : 'DX broadcasts that could be tried at this time instead'}">${opts.join('')}</select>`;
+    } else {
+      ch = `${esc(x.khz)} kHz`;
+    }
+    const res = x.result ? ` q ${Math.round(100 * x.result.quality)}%` : '';
+    return `<tr class="${x.kind} ${x.state}${x.manual ? ' manual' : ''}"><td class="t">${esc(x.start)}\u2013${esc(x.end)}</td>` +
+      `<td class="k">${x.kind === 'core' ? 'CORE' : 'DX'}</td><td>${stName(x.station, x.name)}</td>` +
+      `<td>${esc(x.contents)}${x.valid ? ' <span style="color:var(--dim)">(' + esc(x.valid) + 'Z)</span>' : ''}</td>` +
+      `<td>${ch}</td><td>${esc(x.state)}${res}</td></tr>`;
+  });
+  $('schedBody').innerHTML = rows.join('') || '<tr><td colspan="6" style="color:var(--dim)">nothing planned</td></tr>';
+  $('schedBody').querySelectorAll('select').forEach(sel => sel.onchange = async () => {
+    schedBusy = true; sel.disabled = true; $('schedMsg').textContent = '';
+    try {
+      const r = await fetch('/api/schedule/choose', {method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({row: sel.dataset.row, pick: sel.value || null})});
+      if (!r.ok) { const e = await r.json(); $('schedMsg').textContent = e.error || 'failed'; }
+    } catch (e) { $('schedMsg').textContent = 'failed'; }
+    schedBusy = false; sel.blur(); loadSched(); loadPlan();
+  });
+}
+function openSched(on) {
+  schedOpen = on; $('schedPop').hidden = !on;
+  if (on) { $('schedMsg').textContent = ''; loadSched(); }
+}
+function setSchedRange(r) {
+  schedRange = r; $('bSchToday').classList.toggle('on', r === 'today'); $('bSch24').classList.toggle('on', r === '24h'); loadSched();
+}
+$('bSched').onclick = () => openSched(true);
+$('bSchClose').onclick = () => openSched(false);
+$('schedPop').addEventListener('mousedown', e => { if (e.target === $('schedPop')) openSched(false); });
+window.addEventListener('keydown', e => { if (e.key === 'Escape' && schedOpen) openSched(false); });
+$('bSchToday').onclick = () => setSchedRange('today');
+$('bSch24').onclick = () => setSchedRange('24h');
+setInterval(loadSched, 20000);
 
 
 </script>

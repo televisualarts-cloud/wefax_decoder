@@ -32,7 +32,7 @@ from wefax.schedule import Schedules, slug
 from wefax import label
 from wefax import housekeep
 from wefax import nwscheck
-from wefax.lengths import ChartLengths, CLEAN_ENDS
+from wefax.lengths import ChartLengths, CLEAN_ENDS, slot_time
 from wefax.frontend import Detector, LiveCapture
 
 try:
@@ -329,14 +329,51 @@ class Processor:
             return None
 
     PUBLISH_MIN_QUALITY = 0.5
+    # Stations that send some charts in only part of the transmitted line, the
+    # rest being noise (Boston sends many in the left half of the raster, others
+    # full width): the enhanced copy is trimmed to this share of the width plus a
+    # margin - only when the framing is confirmed (a chart shifted sideways is
+    # never cut), only when the rest of the line really holds no chart (see
+    # _beyond_chart), and never narrower than the title block.
+    RASTER_FRACTION = {"Boston": 0.5}
+    RASTER_MARGIN = 0.02
+    EMPTY_RATIO = 0.5     # structure beyond the chart / structure in it, below which it is empty
+                          # (full-raster charts 0.9-1.3; clean half-raster Boston 0.14-0.49;
+                          # noisy copies ~1 - not trimmed, which is harmless)
+
+    @staticmethod
+    def _structure(dark: np.ndarray) -> float:
+        """How much more likely a dark pixel is below a dark pixel than anywhere:
+        chart lines and lettering run on from line to line, receiver noise and
+        its horizontal streaks do not."""
+        p = float(dark.mean())
+        if p < 1e-3:
+            return 0.0
+        return float((dark[1:] & dark[:-1]).mean() / max(float(dark[:-1].mean()), 1e-6)) - p
+
+    def _beyond_chart(self, img: np.ndarray, frac: float) -> float:
+        """Structure in the part of the line beyond `frac`, relative to the part
+        inside it (raw image, 0..1). ~1: chart all the way across; well below 1:
+        only noise there."""
+        w = img.shape[1]
+        dark = img < 0.5
+        inside = self._structure(dark[:, int(0.05 * w):int((frac - 0.05) * w)])
+        beyond = self._structure(dark[:, int((frac + 0.05) * w):int(0.95 * w)])
+        return beyond / max(inside, 1e-6)
     CHECK_PPM = 15.0      # line period this close to the station's learnt clock (measured spread
                           # is +/-2 ppm; 15 ppm is about 25 px of shear over a whole chart)
     CHECK_HZ = 80.0       # tuning offset this close to its learnt offset
 
-    def _publish_check(self, m: dict, short) -> list:
+    SPLIT_ENDS = ("new start tone", "new phasing")
+    CUT_SHORT_S = 60.0    # a split this long before the chart's learnt end: its tail is missing
+
+    def _publish_check(self, m: dict, short, meta: dict | None = None, product: dict | None = None) -> list:
         """Reasons not to publish this chart ([] = publish).  Every check is
         independent of how the decode reached its answer."""
         why = []
+        cut = self._cut_short(meta or {}, product or {}, m)
+        if cut:
+            why.append(cut)
         if not m.get("align_ok", True):
             why.append("framing not confirmed (" + ", ".join(f"{k} {v}" for k, v in
                                                           (m.get("align_votes") or {}).items()) + ")")
@@ -351,6 +388,24 @@ class Processor:
         if float(m.get("quality", 0)) < self.PUBLISH_MIN_QUALITY:
             why.append(f"quality {float(m.get('quality', 0)):.0%}")
         return why
+
+    def _cut_short(self, meta: dict, product: dict, m: dict):
+        """A recording closed because the next chart seemed to start, well
+        before this chart usually ends: only part of the chart (a false split
+        on picture detail once published a 209-line title strip)."""
+        lengths = getattr(self, "lengths", None)
+        if lengths is None or meta.get("end_reason") not in self.SPLIT_ENDS \
+                or not product.get("slot") or not product.get("short"):
+            return None
+        learnt = lengths.learnt_s(product["short"], product["slot"])
+        t0 = parse_utc(meta.get("utc") or "")
+        if learnt is None or t0 is None or m.get("duration_s") is None:
+            return None
+        end = t0 + timedelta(seconds=float(m["duration_s"]))
+        short_by = (slot_time(product["slot"], end) + timedelta(seconds=learnt) - end).total_seconds()
+        if short_by > self.CUT_SHORT_S:
+            return f"cut short ({meta['end_reason']} {short_by / 60:.1f} min before this chart usually ends)"
+        return None
 
     def clock_hint(self, short=None):
         return self._hint("clock", short)
@@ -424,12 +479,29 @@ class Processor:
         raw_f, enh_f, th_f = f"raw/{stem}.png", f"enhanced/{stem}.png", f"thumbs/{stem}.jpg"
         u8 = lambda x: (np.clip(x, 0, 1) * 255 + 0.5).astype(np.uint8)
         e8 = u8(enh)
+        box = []
         if product and product.get("contents"):
             try:            # title block, top left of the enhanced chart
                 e8 = label.stamp(e8, label.title_lines(product, meta.get("utc", ""),
-                                                       res["meta"].get("quality")))
+                                                       res["meta"].get("quality")), box=box)
             except Exception as e:
                 log.info("title block failed: %s", e)
+        frac = self.RASTER_FRACTION.get(short)
+        ratio = self._beyond_chart(img, frac) if frac and res["meta"].get("align_ok") else None
+        if ratio is not None and ratio >= self.EMPTY_RATIO:
+            log.info("not trimmed: chart runs past %d%% of the line (structure %.2f of the chart's)",
+                     round(100 * frac), ratio)
+        if ratio is not None and ratio < self.EMPTY_RATIO:
+            # the title block is drawn first at its usual size, then the empty
+            # part of the line is cut away - never through the block
+            full = e8.shape[1]
+            keep = max(int(round(full * (frac + self.RASTER_MARGIN))),
+                       (box[0] if box else 0) + int(round(0.01 * full)))
+            if keep < full:
+                e8 = np.ascontiguousarray(e8[:, :keep])
+                einfo["trim"] = {"full_w": full, "kept_w": keep, "beyond": round(ratio, 2)}
+                log.info("trimmed to the chart: %d of %d px wide (only noise beyond %d%% of the line, "
+                         "structure %.2f of the chart's)", keep, full, round(100 * frac), ratio)
         tw = 300
         th = cv2.resize(e8, (tw, max(1, int(e8.shape[0] * tw / e8.shape[1]))), interpolation=cv2.INTER_AREA)
         save_image(self.out / raw_f, u8(img))
@@ -440,7 +512,7 @@ class Processor:
             (self.out / "audio").mkdir(exist_ok=True)
             wavfile.write(str(self.out / "audio" / f"{stem}.wav"), int(round(fs)),
                           (np.clip(audio / (np.max(np.abs(audio)) + 1e-12), -1, 1) * 32000).astype(np.int16))
-        review = self._publish_check(res["meta"], short)
+        review = self._publish_check(res["meta"], short, meta, product)
         rec = {"id": stem, "utc": meta.get("utc"), "trigger": meta.get("trigger"),
                "verified": not review, "review": review,
                "end_reason": meta.get("end_reason"), "product": product,

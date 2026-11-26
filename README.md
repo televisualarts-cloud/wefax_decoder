@@ -138,13 +138,14 @@ Everything is written under `./faxes/` (change this with `--out`):
 | Path | Contents |
 |---|---|
 | `raw/<name>.png` | Decoded chart: geometry corrected, no cleaning |
-| `enhanced/<name>.png` | Cleaned chart at 2x resolution, with a title block top left: station, frequency, date, chart, model run and decode quality |
+| `enhanced/<name>.png` | Cleaned chart at 2x resolution, with a title block top left: station, frequency, date, chart, model run and decode quality. Boston sends many of its charts in the left half of the line (others full width): when the right half holds only noise, the enhanced copy is trimmed to the chart. It is only trimmed when the framing is confirmed and the rest of the line shows no chart structure, and never narrower than the title block; full-width charts and doubtful copies are left whole, and the raw copy always keeps the full line |
 | `thumbs/<name>.jpg` | Thumbnail for the page |
 | `stations/<station>/<chart>.png` | The latest **verified** copy of each chart, e.g. `stations/Northwood/Surface-Analysis.png` - this is the folder to publish from. Only charts that pass every check below get here; a newer issue replaces it, a repeat of the same issue only if it decoded better. The `.json` beside it gives its quality and time |
 | `<name>.json` | Decode details: station and chart, IOC, LPM, AFC, clock ppm, quality, tears, etc. Quality is the share of the picture received on a steady signal (`steady`) times an SNR factor: 1 when the fax stood 12 dB or more above the noise during the picture (`image_snr_db`), falling to 0.6 at 0 dB. A chart counts as collected at 60 % |
 | `proplog.jsonl` | The auto-scheduler's log of every attempt (SNR, quality). A strong signal with no fax decoded is held back from it: three such slots in a row mean the audio reaching the decoder is broken (a virtual audio cable fault, the wrong input), so the page shows AUDIO FAULT? and nothing is counted against the frequencies until a fax decodes again |
 | `chart_lengths.json` | How long each chart runs, learnt from charts that ended on their stop tone or end-of-frame black. A recording is closed 20 s after its chart should have ended (or 15 s before the next slot, for charts not yet learnt), so a faded chart never holds up the auto-scheduler. If a picture is still coming in at that moment it is kept until its stop tone, end-of-frame black or the next chart's start (up to 90 s more) |
 | `settings.json` | Your audio input, CAT port, 1st/2nd priority stations and how many days to keep |
+| `schedule_choices.json` | Frequencies and DX targets you chose in the SCHEDULE pop-up (kept until a couple of hours after each broadcast) |
 
 Audio is not kept unless you add `--save-audio`.
 
@@ -304,6 +305,22 @@ The auto-scheduler needs CAT. Press **AUTO** on the page, or start with
 - **Silent DX probes:** if nothing is received 4 minutes into a DX slot and the
   SNR has stayed below 0 dB, the probe is logged as failed and the time is
   given to the next planned chart or another probe.
+- **Schedule (your own choices):** **SCHEDULE**, next to AUTO PLAN, opens the
+  plan for the rest of the UTC day (or the next 24 hours) in time order:
+  priority (CORE) charts and DX attempts, with the chance of a good copy for
+  each choice.
+  - A priority chart sent on several frequencies has a drop-down of them. The
+    one you choose is used for that broadcast, without the on-air frequency
+    comparison or the off-air hunt.
+  - A DX attempt has a drop-down of the other DX broadcasts and frequencies that
+    fit in its gap, including ones the scheduler would not try itself (backed
+    off, or a path the propagation estimate calls unlikely). The one you choose
+    becomes the first choice for that time.
+  - **automatic choice** at the bottom of the list undoes your choice.
+  - A chart received from your choice is learnt from like any other; a miss is
+    not counted against the frequency.
+  - Choices are kept in `schedule_choices.json` (in `faxes`) and survive a
+    restart; old ones are dropped after their broadcast.
 - **Manual tuning:** using Tune or a chart chip pauses the scheduler for
   20 minutes.
 - **No DX:** use `--no-dx` to stop the gap filling.
@@ -322,10 +339,20 @@ The auto-scheduler needs CAT. Press **AUTO** on the page, or start with
   - red **IDLE** otherwise.
 - **Thumbnail strip:** one UTC day at a time, newest at the top. Use **−1**
   and **+1** to change day.
+- **Live / Last received** (toolbar), remembered in that browser:
+  - **Live** shows the chart being received whenever one is coming in, and
+    the newest chart in between.
+  - **Last received** always shows the newest chart.
+  - Clicking a thumbnail turns both off until you choose one again.
 - **Viewer:**
   - **Raw** and **Enhanced** show the same part of the chart at the same size.
   - The **mouse wheel** zooms and **dragging** pans.
-  - **Fit** and **1:1** reset the zoom.
+  - **Fit width** fits the chart to the width of the window.
+  - **Fit height** fits the whole chart into the height of the window, but
+    never makes it narrower than half the window width (a long chart is
+    then shown at half width and scrolls).
+  - The chosen fit is remembered in that browser and used for every fax
+    shown. **1:1** shows the chart at full size.
   - **Rotate −90° / +90°** turns the chart. Rotation is remembered for each
     fax in that browser.
 

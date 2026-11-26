@@ -534,6 +534,7 @@ class Item:
     result: dict | None = None
     close_t: float = 0.0
     alts: list = field(default_factory=list)   # every frequency the slot is sent on
+    manual: bool = False   # chosen on the page's schedule (frequency and/or DX target)
 
     @property
     def dial(self) -> float:
@@ -543,7 +544,16 @@ class Item:
         return {"start": self.start.strftime("%H:%MZ"), "end": self.end.strftime("%H:%MZ"),
                 "start_ts": self.start.timestamp(),
                 "station": self.short, "khz": self.khz, "dial": self.dial, "contents": self.contents,
-                "valid": self.valid, "kind": self.kind, "state": self.state, "score": round(self.score, 2)}
+                "valid": self.valid, "kind": self.kind, "state": self.state, "score": round(self.score, 2),
+                "manual": self.manual, "name": self.station}
+
+
+def choice_key(short: str, start: datetime) -> str:
+    """One broadcast of one station: 'DWD|2026-11-22T15:20'."""
+    return f"{short}|{start:%Y-%m-%dT%H:%M}"
+
+
+MANUAL_SCORE = 1e6        # a DX target chosen on the page beats every automatic one
 
 
 def _durations(slots: list[Slot], default: int = 12) -> dict[int, int]:
@@ -568,6 +578,10 @@ class Planner:
         self.rng = rng or random.Random()
         self.core = core_weights(priorities or DEFAULT_PRIORITIES)
         self.lengths = None    # ChartLengths, set by the main program
+        # choices made on the page's schedule: choice_key -> kHz.  A core chart
+        # is received on that frequency; a DX broadcast becomes the first
+        # choice for its time and is tried even if the model rates it low
+        self.choices: dict[str, float] = {}
 
     def _occurrences(self, st: Station, now: datetime, horizon_h: float):
         """(start, end, slot, [khz options]) for every slot in the window."""
@@ -657,9 +671,12 @@ class Planner:
                 # repeat goes ahead of everything else (on the best known frequency)
                 retry = n == 0 and self.log.is_retry(key)
                 khz, p = self._best_freq(st.short, khzs, start, explore=imp < 20 and not retry)
+                pick = self.choices.get(choice_key(st.short, start))
+                if pick in khzs:
+                    khz = pick
                 cands.append(Item(start, end, st.short, st.name, sl.hhmm, contents, valid, khz, "core",
                                   self.core[st.short] + imp * 10 + 50 * p - 25 * n + (RETRY_BONUS if retry else 0),
-                                  key, alts=list(khzs)))
+                                  key, alts=list(khzs), manual=pick in khzs))
         chosen = self._select(cands, [b for b in busy if b.kind == "core"])
         if not self.dx:
             return chosen
@@ -670,6 +687,13 @@ class Planner:
                 continue
             for start, end, sl, khzs in self._occurrences(st, now, horizon_h):
                 if start < now + timedelta(seconds=LEAD_S):
+                    continue
+                pick = self.choices.get(choice_key(st.short, start))
+                if pick in khzs:
+                    # chosen on the page: tried whatever the model expects
+                    key = f"{chart_key(st.short, sl.contents, sl.valid)}|{start.date()}"
+                    dx.append(Item(start, end, st.short, st.name, sl.hhmm, sl.contents, sl.valid, pick, "dx",
+                                   MANUAL_SCORE, key, alts=list(khzs), manual=True))
                     continue
                 elig = [k for k in khzs if self.log.backoff_until(st.short, k, start) <= start.timestamp()]
                 # skip what the propagation model calls hopeless (a 2 MHz path
@@ -689,6 +713,36 @@ class Planner:
                 dx.append(Item(start, end, st.short, st.name, sl.hhmm, sl.contents, sl.valid, khz, "dx",
                                100 * p + imp, key, alts=list(elig)))
         return self._select(dx, chosen + [b for b in busy if b.kind != "core"])
+
+    def dx_options(self, now: datetime, horizon_h: float = 24.0) -> list[Item]:
+        """Every DX broadcast and frequency in the window, scored but not
+        filtered: what the page offers as alternatives to a planned DX probe."""
+        out = []
+        for st in self.sched.stations:
+            if st.short in self.core:
+                continue
+            for start, end, sl, khzs in self._occurrences(st, now, horizon_h):
+                if start < now + timedelta(seconds=LEAD_S):
+                    continue
+                key = f"{chart_key(st.short, sl.contents, sl.valid)}|{start.date()}"
+                for k in khzs:
+                    it = Item(start, end, st.short, st.name, sl.hhmm, sl.contents, sl.valid, k, "dx",
+                              self.log.score(self.qth, st.short, k, start), key, alts=list(khzs))
+                    it.backoff = self.log.backoff_until(st.short, k, start) > start.timestamp()
+                    it.prior = prior(self.qth, st.short, k, start)
+                    out.append(it)
+        return out
+
+    @staticmethod
+    def fits(it: Item, taken: list[Item]) -> bool:
+        """The same test _select uses: no overlap with the same station, and
+        a retuning gap before/after another station."""
+        gap = timedelta(seconds=SWITCH_GAP_S)
+        for t in taken:
+            g = timedelta(0) if t.short == it.short else gap
+            if it.start < t.end + g and t.start < it.end + g:
+                return False
+        return True
 
     @staticmethod
     def _select(cands: list[Item], fixed: list[Item] | None = None) -> list[Item]:
@@ -738,6 +792,8 @@ class AutoScheduler:
         self.priorities = self._load_priorities(sched)
         self.qth = tuple(qth)
         self.planner = Planner(sched, self.proplog, qth, dx, priorities=self.priorities)
+        self.choices_path = Path(out_dir) / "schedule_choices.json"
+        self.planner.choices = self._load_choices()
         self.enabled = enabled
         self.paused_until = 0.0
         self.items: list[Item] = []
@@ -797,6 +853,93 @@ class AutoScheduler:
             self.logf(f"could not save settings: {e}")
         self.logf(f"auto: priorities 1st {first}, 2nd {second or '-'}")
         self.replan()
+
+    # -------- choices made on the page's schedule
+    def _load_choices(self) -> dict:
+        try:
+            d = json.loads(self.choices_path.read_text())
+            return self._prune({k: float(v) for k, v in d.items()})
+        except Exception:
+            return {}
+
+    def _prune(self, d: dict) -> dict:
+        """Choices for broadcasts more than 2 hours past are dropped."""
+        cut = (self.clock() - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M")
+        return {k: v for k, v in d.items() if k.split("|", 1)[-1] >= cut}
+
+    def _save_choices(self):
+        self.planner.choices = self._prune(self.planner.choices)
+        try:
+            tmp = self.choices_path.with_suffix(".json.part")
+            tmp.write_text(json.dumps(self.planner.choices, indent=1, sort_keys=True))
+            tmp.replace(self.choices_path)
+        except Exception as e:
+            self.logf(f"could not save schedule choices: {e}")
+
+    def choose(self, row: str, pick: str | None):
+        """A choice on the page's schedule.  row: the choice_key of the plan
+        item the choice was made on; pick: 'short|start|khz', or None to go
+        back to the automatic choice for that row."""
+        with self._lock:
+            it = next((i for i in self.items if choice_key(i.short, i.start) == row), None)
+        if it is None:
+            raise ValueError("that broadcast is no longer in the plan")
+        if it.state != "planned":
+            raise ValueError("already tuned or finished - too late to change")
+        ch = dict(self.planner.choices)
+        ch.pop(row, None)                 # the row's own earlier choice (if any)
+        if pick:
+            short, start, khz = pick.rsplit("|", 2)
+            key = f"{short}|{start}"
+            khz = float(khz)
+            if it.kind == "core" and (key != row or khz not in it.alts):
+                raise ValueError("not a frequency of this chart")
+            ch[key] = khz
+            self.logf(f"auto: schedule choice {key.replace('|', ' ')}Z on {khz:g} kHz"
+                      + (f" (instead of {it.short} {it.start:%H:%M}Z)" if key != row else ""))
+        else:
+            self.logf(f"auto: schedule choice cleared for {row.replace('|', ' ')}Z - automatic again")
+        self.planner.choices = ch
+        self._save_choices()
+        self.replan()
+
+    def schedule(self, until: datetime) -> list[dict]:
+        """The plan up to `until`, for the page's schedule list: every item
+        with the choices it offers (core: its parallel frequencies; DX: the
+        other broadcasts and frequencies that could take its place)."""
+        now = self.clock()
+        with self._lock:
+            items = [i for i in self.items if i.start < until and i.end + timedelta(seconds=TAIL_S) > now]
+        fixed = [i for i in items if i.kind == "core" or i.state != "planned"]
+        try:
+            opts = self.planner.dx_options(now, max(1.0, (until - now).total_seconds() / 3600 + 1))
+        except Exception as e:
+            self.logf(f"schedule options failed: {e}")
+            opts = []
+        rows = []
+        for it in sorted(items, key=lambda x: x.start):
+            r = it.to_json()
+            r["id"] = choice_key(it.short, it.start)
+            r["slot"] = it.slot
+            r["result"] = it.result
+            r["alts"] = []
+            if it.state == "planned" and it.kind == "core" and len(set(it.alts)) > 1:
+                r["alts"] = [{"pick": f"{r['id']}|{k:g}", "station": it.short, "name": it.station, "khz": k,
+                              "start": it.start.strftime("%H:%MZ"), "contents": it.contents,
+                              "pct": round(100 * self.proplog.score(self.qth, it.short, k, it.start)),
+                              "current": k == it.khz} for k in sorted(set(it.alts))]
+            elif it.state == "planned" and it.kind == "dx":
+                others = [f for f in fixed if f is not it]
+                cand = [o for o in opts if o.start < it.end and it.start < o.end and self.planner.fits(o, others)]
+                cand.sort(key=lambda o: (-(o.short == it.short and o.start == it.start and o.khz == it.khz), -o.score))
+                r["alts"] = [{"pick": f"{choice_key(o.short, o.start)}|{o.khz:g}", "station": o.short, "name": o.station,
+                              "khz": o.khz, "start": o.start.strftime("%H:%MZ"), "contents": o.contents,
+                              "pct": round(100 * o.score), "backoff": bool(getattr(o, "backoff", False)),
+                              "unlikely": getattr(o, "prior", 1.0) < DX_MIN_PRIOR,
+                              "current": o.short == it.short and o.start == it.start and o.khz == it.khz}
+                             for o in cand[:40]]
+            rows.append(r)
+        return rows
 
     def manual_override(self, minutes=20):
         if self.enabled:
@@ -925,7 +1068,7 @@ class AutoScheduler:
             return                                   # the scan thread has the receiver
         cur = self.current
         if (cur is not None and cur.state == "tuned" and not self.receiving and SCAN
-                and len(set(cur.alts)) >= 2 and not getattr(cur, "hunted", False)
+                and len(set(cur.alts)) >= 2 and not cur.manual and not getattr(cur, "hunted", False)
                 and cur.start + timedelta(seconds=OFFAIR_WAIT_S) <= now
                 <= cur.start + timedelta(seconds=OFFAIR_LATEST_S) and self._quiet()):
             cur.hunted = True
@@ -1016,6 +1159,15 @@ class AutoScheduler:
         rec = {"utc": it.start.strftime("%Y-%m-%dT%H:%M:%SZ"), "short": it.short, "khz": it.khz,
                "slot": it.slot, "snr_db": snr, "quality": round(quality, 3), "key": it.key,
                "kind": it.kind, "hour": it.start.hour}
+        good = quality >= (GOOD_QUALITY if it.kind == "core" else DX_GOOD_QUALITY)
+        if it.manual:
+            # chosen on the page: a chart received this way is learnt from like
+            # any other; a miss is not counted (the choice was a person's hunch,
+            # not the model's, and must not back the frequency off)
+            if not good:
+                self.logf(f"auto: {it.short} {it.khz} kHz {it.slot}Z (schedule choice) not received - not counted")
+                return
+            rec["manual"] = True
         if not self._audio_check(rec, quality, snr):
             return
         self.proplog.add(rec)
@@ -1032,8 +1184,8 @@ class AutoScheduler:
     def _scan_list(self, it: Item, now: datetime) -> list[float]:
         """The frequencies to compare (best expected first), as many as fit
         before the slot; [] if there is nothing to compare or no time."""
-        if not SCAN or len(set(it.alts)) < 2:
-            return []
+        if not SCAN or len(set(it.alts)) < 2 or it.manual:
+            return []                      # (a frequency chosen on the page is kept)
         per = SCAN_SETTLE_S + SCAN_MEASURE_S + 1.5          # + CAT poll and confirmation
         room = (it.start - now).total_seconds() - SCAN_DONE_BEFORE_S - 3.0   # - final retune
         n = int(room // per)
@@ -1103,7 +1255,8 @@ class AutoScheduler:
     def _maybe_phasing_scan(self, trigger: str = "start tone"):
         it = self.current
         if not (SCAN and SCAN_PHASING and self.enabled and not self.scanning and it is not None
-                and it.state == "tuned" and len(set(it.alts)) >= 2 and not getattr(it, "scan_done", False)
+                and it.state == "tuned" and len(set(it.alts)) >= 2 and not it.manual
+                and not getattr(it, "scan_done", False)
                 and self.cat is not None and self.cat.enabled):
             return
         now = self.clock()

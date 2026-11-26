@@ -52,8 +52,9 @@ def title_lines(product: dict, utc: str, quality: float | None) -> list[str]:
     return [" | ".join(first), " | ".join(p for p in second if p)]
 
 
-def stamp(img_u8: np.ndarray, lines: list[str]) -> np.ndarray:
-    """Draw the title block onto a greyscale uint8 image (returns a new image)."""
+def stamp(img_u8: np.ndarray, lines: list[str], box: list | None = None) -> np.ndarray:
+    """Draw the title block onto a greyscale uint8 image (returns a new image).
+    box: if given, the block's width in pixels is appended to it."""
     h, w = img_u8.shape[:2]
     size = max(14, int(round(w * TEXT_FRAC)))
     pad = int(round(size * PAD_FRAC))
@@ -70,6 +71,8 @@ def stamp(img_u8: np.ndarray, lines: list[str]) -> np.ndarray:
         tw = max(b[2] for b in boxes)
         bw = tw + 2 * pad + 2 * border
         bh = len(lines) * lh + (len(lines) - 1) * gap + 2 * pad + 2 * border
+        if box is not None:
+            box.append(bw)
         d.rectangle([0, 0, bw - 1, bh - 1], fill=0)
         d.rectangle([border, border, bw - 1 - border, bh - 1 - border], fill=_white())
         y = border + pad
@@ -87,6 +90,8 @@ def stamp(img_u8: np.ndarray, lines: list[str]) -> np.ndarray:
         lh = max(s[1] for s in sizes) + int(size * 0.35)
         bw = max(s[0] for s in sizes) + 2 * pad + 2 * border
         bh = len(lines) * lh + (len(lines) - 1) * gap + 2 * pad + 2 * border
+        if box is not None:
+            box.append(bw)
         cv2.rectangle(out, (0, 0), (bw - 1, bh - 1), 0, -1)
         cv2.rectangle(out, (border, border), (bw - 1 - border, bh - 1 - border), _white(), -1)
         y = border + pad
