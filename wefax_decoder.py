@@ -623,7 +623,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--list-devices", action="store_true", help="list audio devices and exit")
     ap.add_argument("--device", default="Line 8 (Virtual Audio Cable) MME",
-                    help="input device name (substring) or index")
+                    help="input device name (substring) or index, or udp / udp:PORT for Gqrx's UDP audio")
     ap.add_argument("--channel", type=int, default=0, help="input channel (0 = left)")
     ap.add_argument("--samplerate", type=float, help="force capture sample rate")
     ap.add_argument("--wav", help="decode a WAV recording instead of live audio")
@@ -644,7 +644,11 @@ def main():
                          "its centre, or its start")
     ap.add_argument("--max-minutes", type=float, default=40.0)
     ap.add_argument("--save-audio", action="store_true", help="also keep each transmission as WAV")
-    ap.add_argument("--cat", metavar="COMx", help="SDR Console CAT (TS-2000) port, to read the frequency")
+    ap.add_argument("--cat", metavar="PORT",
+                    help="receiver control: a COM port for SDR Console (TS-2000 CAT, e.g. COM4), "
+                         "gqrx (Gqrx remote control on this PC, port 7356), rigctld (rigctld / SDR++ "
+                         "on this PC, port 4532), tcp:host:port for another rigctl receiver, or auto "
+                         "(the default: look for Gqrx / rigctld / SDR++ on this PC)")
     ap.add_argument("--cat-rx", type=int, default=1, help="SDR Console receiver number (1-6)")
     ap.add_argument("--cat-baud", type=int, default=57600)
     ap.add_argument("--station", help="station when no CAT, e.g. DWD or Northwood")
@@ -660,6 +664,7 @@ def main():
     if args.list_devices:
         import sounddevice as sd
         print(sd.query_devices())
+        print("\nAlso: --device udp  (Gqrx UDP audio, port 7355; udp:PORT for another port)")
         return
 
     out = Path(args.out)
@@ -690,6 +695,8 @@ def main():
         port = args.cat if saved == "unset" else saved
         if saved != "unset" and args.cat and saved != args.cat:
             log.info("CAT: using %s chosen on the page (start option said %s)", saved or "off", args.cat)
+        if saved == "unset" and not args.cat:
+            port = "auto"        # nothing chosen: look for Gqrx / rigctld / SDR++ on this PC
         cat = CatReader(port, args.cat_baud, args.cat_rx, log=log.info)
     from wefax.autosched import AutoScheduler, parse_qth, DEFAULT_QTH
     # the location set on the page (faxes/settings.json) wins over --qth
@@ -707,8 +714,18 @@ def main():
              " (default - set yours in the QTH box on the page)")
     auto = AutoScheduler(sched, cat, out, qth, enabled=bool(args.auto and cat and cat.enabled),
                          dx=not args.no_dx, log=log.info)
-    if args.auto and not (cat and cat.enabled):
-        log.info("auto-schedule needs a CAT port to tune SDR Console - left off")
+    if args.auto and cat is not None and not cat.enabled and str(cat.port).lower() == "auto":
+        # receiver control not found yet: start the scheduler once it is
+        log.info("auto-schedule starts as soon as a receiver is found (Gqrx / rigctld / SDR++)")
+
+        def _auto_on_found():
+            if not auto.enabled and str(cat.port).lower() == "auto":
+                auto.set_enabled(True)
+            cat.on_connect = None           # only the first time: AUTO OFF on the page is respected
+        cat.on_connect = _auto_on_found
+    elif args.auto and not (cat and cat.enabled):
+        log.info("auto-schedule needs receiver control (a CAT port for SDR Console, or Gqrx / rigctld / "
+                 "SDR++) - left off")
     hub.sched, hub.cat, hub.auto = sched, cat, auto
     hub.settings["station"] = args.station
     proc = Processor(out, hub, args, sched, cat)

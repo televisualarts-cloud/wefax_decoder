@@ -145,8 +145,8 @@ def make_handler(hub: Hub):
                     return self._send(200, json.dumps({"ok": True, "dial_khz": round(dial, 2)}).encode(),
                                       "application/json")
                 now = hub.cat.freq_hz
-                msg = (f"sent, but SDR Console still reports {now / 1000:.1f} kHz" if now
-                       else "sent, but SDR Console is not reporting a frequency")
+                msg = (f"sent, but {hub.cat.radio} still reports {now / 1000:.1f} kHz" if now
+                       else f"sent, but {hub.cat.radio} is not reporting a frequency")
                 return self._send(502, json.dumps({"error": msg}).encode(), "application/json")
             if path == "/api/auto":
                 if hub.auto is None:
@@ -248,23 +248,36 @@ def make_handler(hub: Hub):
             elif path == "/api/audio":
                 if hub.capture is None:
                     return self._send(200, json.dumps({"available": False}).encode(), "application/json")
-                from .frontend import list_inputs
+                from .frontend import list_inputs, udp_input, udp_spec
                 devs = []
+                st = hub.capture.status()
                 if "list=0" not in self.path:
                     try:
                         devs = list_inputs(hub.capture.sd)
                     except Exception:
                         pass
-                st = hub.capture.status()
+                    # Gqrx's UDP audio: offered while Gqrx is the receiver in control,
+                    # or while it is the input in use
+                    cur = udp_spec(st.get("current") or {})
+                    gqrx = bool(hub.cat and hub.cat.connected and getattr(hub.cat, "radio", "") == "Gqrx")
+                    if cur or gqrx:
+                        devs.append(udp_input(cur[1] if cur else 7355))
                 self._send(200, json.dumps({"available": True, "devices": devs, **st}).encode(), "application/json")
             elif path == "/api/ports":
-                from .cat import list_ports
+                from .cat import list_ports, describe
                 cur = hub.cat.port if hub.cat else None
-                ports = list_ports()
+                found = hub.cat.found if hub.cat else None
+                # network receivers first (Gqrx, rigctld / SDR++), then the COM ports
+                ports = [{"port": "auto", "desc": f"found {found}" if found and cur == "auto"
+                          else "look for Gqrx / rigctld / SDR++ on this PC"},
+                         {"port": "gqrx", "desc": "Gqrx remote control (this PC, port 7356)"},
+                         {"port": "rigctld", "desc": "rigctld / SDR++ (this PC, port 4532)"}]
+                ports += list_ports()
                 if cur and cur not in [p["port"] for p in ports]:
-                    ports.append({"port": cur, "desc": "not found"})
-                self._send(200, json.dumps({"ports": ports, "current": cur,
+                    ports.append({"port": cur, "desc": describe(cur) if str(cur).startswith("tcp:") else "not found"})
+                self._send(200, json.dumps({"ports": ports, "current": cur, "found": found,
                                             "connected": bool(hub.cat and hub.cat.connected),
+                                            "link": hub.cat.status().get("cat_link") if hub.cat else None,
                                             "available": hub.cat is not None}).encode(), "application/json")
             elif path == "/api/qth":
                 from .autosched import DEFAULT_QTH

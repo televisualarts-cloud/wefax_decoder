@@ -6,8 +6,10 @@ Northwood (GYA), DWD and other international stations.
 It listens to a sound-card input, finds each transmission automatically and
 decodes it, correcting tuning offset, slant and tears. It then cleans and
 sharpens the chart, names it from the broadcast schedules, saves it to disk
-and shows it in a browser page. With SDR Console's CAT port it can also
-retune the radio through the day to collect the most important charts.
+and shows it in a browser page. With receiver control - SDR Console's CAT
+port on Windows, or Gqrx, rigctld (Hamlib) or SDR++ over the network on any
+system - it can also retune the radio through the day to collect the most
+important charts.
 
 ![The decoder's page: a DWD chart being received, the live spectrum and waterfall top right, the auto-scheduler's plan and the last decoded chart](docs/images/screenshot-page.jpg)
 
@@ -24,8 +26,9 @@ retune the radio through the day to collect the most important charts.
   light processing.
 - Chart identification from the OpenCPN worldwide schedule file, giving file
   names such as `20261011_1800Z_DWD_surface-pressure-analysis.png`.
-- SDR Console control over a Kenwood TS-2000 CAT port: frequency read-back,
-  tuning, and an **auto-scheduler**. You choose the 1st and 2nd priority
+- Receiver control - SDR Console over a Kenwood TS-2000 CAT port, or Gqrx,
+  rigctld (Hamlib) and SDR++ over rigctl, found automatically on Linux, Mac
+  or Windows: frequency read-back, tuning, and an **auto-scheduler**. You choose the 1st and 2nd priority
   stations, DX stations fill the gaps, and it learns which frequencies work
   at each time of day.
 - A browser page with the following:
@@ -60,9 +63,10 @@ Python 3.9 or later.
 pip install -r requirements.txt
 ```
 
-`onnxruntime` (for the neural upscaler), `pyserial` (for CAT) and `pillow`
-(for the title block font) are optional. Without them the decoder uses a Lanczos
-upscale, cannot do CAT, and draws the title block in a plainer font.
+`onnxruntime` (for the neural upscaler), `pyserial` (for SDR Console's COM
+port CAT) and `pillow` (for the title block font) are optional. Without them
+the decoder uses a Lanczos upscale, cannot use a COM port (network receivers
+such as Gqrx still work), and draws the title block in a plainer font.
 
 ## Quick start
 
@@ -202,6 +206,55 @@ a Kenwood TS-2000 CAT port:
 Without CAT, tell the decoder which station you are on with
 `--station DWD`, or pick it in the station box on the page.
 
+## Gqrx, rigctld and SDR++ (Linux, Mac, Windows)
+
+Receivers that speak Hamlib's rigctl protocol over TCP are controlled the
+same way as SDR Console: frequency read-back, tuning, USB, the auto-scheduler,
+the frequency scans and the off-air hunt all work.
+
+- **Gqrx:** turn on **Tools > Remote control** (it is off by default; it
+  stays on once set). Gqrx listens on port 7356 and accepts this PC
+  (127.0.0.1) unless you have changed its allowed hosts.
+- **rigctld** (any Hamlib-supported radio): for example
+  `rigctld -m <model> -r /dev/ttyUSB0`; it listens on port 4532.
+- **SDR++:** enable the **Rigctl Server** module (port 4532) and start it.
+
+Nothing needs choosing: when no CAT has been chosen, the decoder looks for
+Gqrx on port 7356, then rigctld / SDR++ on port 4532, on this PC every 30 s,
+and uses the first that answers (the log says `CAT: auto - found Gqrx on
+127.0.0.1:7356`; the **CAT** box shows it). With `--auto`, the
+auto-scheduler starts as soon as one is found. Starting the receiver after
+the decoder is fine.
+
+The **CAT** box (or `--cat` at start-up) also takes `gqrx`, `rigctld`, or
+`tcp:host:port` for a receiver on another machine or another port, and
+**(off)** stops all receiver control (and the search). A COM port chosen for
+SDR Console always takes precedence over the search.
+
+Set the receiver to USB with its normal SSB filter; the decoder tunes the
+dial 1.9 kHz below the published frequency, as for SDR Console. The ±200 kHz
+retune hop used for SDR Console is not used here.
+
+**Gqrx UDP audio (simplest):** in Gqrx's audio panel press **UDP** (host
+`localhost`, port 7355 - the defaults), then choose **Gqrx UDP audio
+(port 7355)** in **Audio in** on the page. It is listed while Gqrx is
+connected for receiver control, and the choice is saved like any other
+input. No sound routing is needed, and Gqrx's speaker output is unaffected.
+Mono or stereo UDP is detected (stereo uses the left channel). If the
+stream stops, the **Audio in** box turns red and says so; the decoder carries
+on with silence until it resumes. At start-up, `--device udp` (or
+`--device udp:PORT`) selects it. The decoder's line timing then follows the
+SDR's own sample clock; the per-station clock learning adapts to it within a
+few charts.
+
+**Audio through the sound system instead:** with PulseAudio or PipeWire,
+choose `pulse` (or `default`) in **Audio in** on the page, then in `pavucontrol` > **Recording** set the decoder's input (shown as
+python) to the *monitor* of the output Gqrx plays to. To keep the fax audio
+off your speakers, send Gqrx to a null sink and use its monitor:
+`pactl load-module module-null-sink sink_name=wefax`, set Gqrx's audio output
+to "wefax", and pick "Monitor of wefax" for the decoder in `pavucontrol`.
+`python wefax_decoder.py --list-devices` lists the inputs the decoder sees.
+
 The schedules come from the OpenCPN weatherfax plugin's worldwide
 `WeatherFaxSchedules.xml` in `wefax/data/`, checked station by station
 against the NWS list of worldwide radiofax schedules (revision of 7 March
@@ -237,8 +290,9 @@ standard library only) reads it, so nothing extra needs installing.
 
 ## Auto-scheduler
 
-The auto-scheduler needs CAT. Press **AUTO** on the page, or start with
-`--cat COM4 --auto`.
+The auto-scheduler needs receiver control: SDR Console CAT, or Gqrx /
+rigctld / SDR++ (found automatically). Press **AUTO** on the page, or start
+with `--auto` (and `--cat COM4` for SDR Console).
 
 - **Priority stations:** choose them with **1st priority** and **2nd priority**
   in the top bar. The default is Northwood then DWD, and the choice is saved.
@@ -365,6 +419,8 @@ The auto-scheduler needs CAT. Press **AUTO** on the page, or start with
 | `--mode chart`, `--mode greyscale` | Force the finishing mode (`auto` picks one per fax) |
 | `--ioc 288`, `--lpm 60` | Override the detected values |
 | `--save-audio` | Also keep each transmission as a WAV file |
+| `--device udp`, `--device udp:PORT` | Gqrx's UDP audio instead of a sound card (port 7355 by default) |
+| `--cat gqrx`, `--cat rigctld`, `--cat tcp:host:port` | Network receiver control (Gqrx port 7356, rigctld / SDR++ port 4532); `--cat COM4` for SDR Console; default `auto` |
 | `--host 0.0.0.0` | Allow viewing from other devices on your LAN |
 | `--port 8730` | Web page port |
 
@@ -443,7 +499,7 @@ wefax/
   enhance.py              streak removal, line rebuilding, upscaling
   preview.py              live preview image
   schedule.py             broadcast schedules and chart identification
-  cat.py                  Kenwood TS-2000 CAT for SDR Console
+  cat.py                  receiver control: TS-2000 CAT (SDR Console), rigctl (Gqrx, rigctld, SDR++)
   autosched.py            auto-scheduler, propagation model, learning log
   housekeep.py            nightly deletion of faxes older than the Keep setting
   nwscheck.py             monthly check of the NWS worldwide schedule list

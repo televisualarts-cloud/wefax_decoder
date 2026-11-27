@@ -190,8 +190,8 @@
   <span class="meter" id="clock"></span>
 </header>
 <div class="setbar">
-  <label class="prio">Audio in <select id="selAudio" title="Sound-card input carrying the receiver audio"></select></label>
-  <label class="prio">CAT port <select id="selCat" title="SDR Console CAT (TS-2000) COM port"></select></label>
+  <label class="prio">Audio in <select id="selAudio" title="Sound-card input carrying the receiver audio (or Gqrx UDP audio, listed while Gqrx is connected)"></select></label>
+  <label class="prio">CAT <select id="selCat" title="Receiver control: a COM port for SDR Console, or a network receiver (Gqrx, rigctld, SDR++)"></select></label>
   <label class="prio">1st priority <select id="selP1"></select></label>
   <label class="prio">2nd priority <select id="selP2"></select></label>
   <label class="prio">QTH <input id="inQth" spellcheck="false" placeholder="lat, lon or IO70ri"
@@ -232,7 +232,7 @@
     <div style="flex-basis:100%;height:0"></div>
     <span title="Broadcast times of the station selected above - click one to tune it">THIS STATION</span><div class="chips" id="upcoming"></div>
     <div style="flex-basis:100%;height:0"></div>
-    <button id="bAuto" title="Auto-schedule: tune SDR Console to the most important charts of your 1st and 2nd priority stations, DX in the gaps">AUTO</button>
+    <button id="bAuto" title="Auto-schedule: tune the receiver (SDR Console, Gqrx, rigctld, SDR++) to the most important charts of your 1st and 2nd priority stations, DX in the gaps">AUTO</button>
     <span id="autoMsg"></span>
     <button id="bSched" title="Today's schedule: every planned chart and DX attempt in time order - choose another frequency or DX target">SCHEDULE</button>
     <span title="What the auto-scheduler will tune, in order">AUTO PLAN</span><span id="nextBig" hidden></span><div class="chips" id="plan"></div>
@@ -562,7 +562,7 @@ function status(s) {
   tuned(s); followRadio(s);
   if (s.cat !== undefined && document.activeElement !== $('selCat')) {
     const was = $('selCat').classList.contains('ok');
-    if ((s.cat_port || null) !== catCur) loadPorts(); else paintCat(s.cat);
+    if ((s.cat_port || null) !== catCur || (s.cat_link || null) !== catLink) loadPorts(); else paintCat(s.cat);
     if (was !== !!s.cat) { loadStations(); }
   }
   lastStatus = s; paintLive();
@@ -744,7 +744,7 @@ async function loadStations() {
   if (pre) selS.value = pre.name;
   fillFreqs(); fillUpcoming();
   $('bTune').disabled = !catOn;
-  $('bTune').title = catOn ? 'Retune SDR Console' : 'Start the decoder with --cat COMx to enable tuning';
+  $('bTune').title = catOn ? 'Retune the receiver' : 'Tuning needs receiver control: choose a COM port for SDR Console or a network receiver (Gqrx, rigctld, SDR++) in the CAT box';
 }
 // ---- audio input
 let audioCur = null;
@@ -783,13 +783,13 @@ $('selAudio').onchange = async () => {
 };
 setInterval(() => loadAudio(false), 5000);
 
-// ---- SDR Console CAT port
-let catCur = null;
+// ---- receiver control: SDR Console COM port, or a network receiver (Gqrx / rigctld / SDR++)
+let catCur = null, catLink = null;
 async function loadPorts() {
   try {
     const j = await (await fetch('/api/ports')).json();
     if (!j.available) { $('selCat').disabled = true; $('selCat').innerHTML = '<option>file mode</option>'; return; }
-    catCur = j.current;
+    catCur = j.current; catLink = j.link;
     $('selCat').innerHTML = '<option value="">(off)</option>' + j.ports.map(p =>
       `<option value="${esc(p.port)}">${esc(p.port)}${p.desc ? ' \u2013 ' + esc(p.desc) : ''}</option>`).join('');
     $('selCat').value = catCur || '';
@@ -798,10 +798,13 @@ async function loadPorts() {
 }
 function paintCat(connected) {
   const el = $('selCat');
+  const looking = catCur === 'auto' && !connected;      // auto: nothing found yet - not an error
   el.classList.toggle('ok', !!catCur && connected);
-  el.classList.toggle('bad', !!catCur && !connected);
-  el.title = !catCur ? 'CAT off - choose the COM port paired with SDR Console'
-    : (connected ? `SDR Console connected on ${catCur}` : `No answer from SDR Console on ${catCur}`);
+  el.classList.toggle('bad', !!catCur && !connected && !looking);
+  el.title = !catCur ? 'CAT off - choose the COM port paired with SDR Console, or a network receiver (Gqrx, rigctld, SDR++)'
+    : looking ? 'Looking for Gqrx (port 7356) or rigctld / SDR++ (port 4532) on this PC every 30 s. In Gqrx turn on Tools > Remote control.'
+    : connected ? `Connected to ${catLink || catCur}`
+    : `No answer on ${catCur}`;
 }
 $('selCat').addEventListener('mousedown', () => { if (document.activeElement !== $('selCat')) loadPorts(); });
 $('selCat').onchange = async () => {
@@ -920,7 +923,7 @@ async function loadPlan() {
   b.classList.toggle('on', !!j.enabled);
   b.textContent = j.enabled ? 'AUTO ON' : 'AUTO OFF';
   b.disabled = !j.cat;
-  if (!j.cat) b.title = 'Start the decoder with --cat COMx to enable the auto-scheduler';
+  if (!j.cat) b.title = 'The auto-scheduler needs receiver control: choose a COM port for SDR Console or a network receiver (Gqrx, rigctld, SDR++) in the CAT box';
   const am = $('autoMsg');
   am.textContent = j.audio_fault ? 'AUDIO FAULT? strong signal but no fax in 3 slots - check the audio input'
     : j.enabled && j.paused_min ? `paused ${j.paused_min} min (manual tune)` : '';

@@ -598,6 +598,39 @@ def list_inputs(sd) -> list[dict]:
     return out
 
 
+# Gqrx can send its demodulated audio over UDP (the "UDP" button in its audio
+# panel): signed 16-bit little-endian, 48 kHz, mono (or stereo, left/right
+# interleaved, if its UDP stereo option is on), to localhost:7355 by default.
+UDP_DEFAULT_PORT = 7355
+UDP_RATE = 48000.0
+UDP_NAME = "Gqrx UDP audio"
+
+
+def udp_spec(spec):
+    """(bind host, port) if spec means Gqrx UDP audio, else None.
+    Accepts {"name": "Gqrx UDP audio (port 7355)", "api": "UDP"} as saved by the
+    page, or "udp", "udp:7355", "udp:0.0.0.0:7355" from the command line."""
+    import re
+    if isinstance(spec, dict):
+        if str(spec.get("api", "")).upper() != "UDP":
+            return None
+        m = re.search(r"port (\d+)", str(spec.get("name", "")))
+        return (spec.get("bind") or "127.0.0.1", int(m.group(1)) if m else UDP_DEFAULT_PORT)
+    if isinstance(spec, str) and spec.lower().startswith("udp"):
+        parts = spec.split(":")[1:]
+        if not parts or parts == [""]:
+            return ("127.0.0.1", UDP_DEFAULT_PORT)
+        if len(parts) == 1:
+            return ("127.0.0.1", int(parts[0]))
+        return (parts[0] or "127.0.0.1", int(parts[1]))
+    return None
+
+
+def udp_input(port: int = UDP_DEFAULT_PORT) -> dict:
+    """How the UDP input is listed on the page."""
+    return {"index": -1, "name": f"{UDP_NAME} (port {port})", "api": "UDP", "channels": 1, "default": False}
+
+
 def resolve_input(sd, spec):
     """Device index for a spec: None (system default), an index, a name
     (substring, as on the command line) or {"name", "api"} as saved by the page."""
@@ -657,6 +690,25 @@ class LiveCapture:
     # ------------------------------------------------------------------
     def _configure(self, spec) -> bool:
         sd = self.sd
+        udp = udp_spec(spec)
+        if udp is not None:
+            # Gqrx UDP audio: no sound card; 48 kHz from the network
+            self.channel, self.channels = 0, 1
+            self.sr = UDP_RATE
+            self.dec = dsp.Decimator(self.sr)
+            old = self.detector
+            if old is not None and old.state == "receiving":
+                old.flush()
+            self.detector = self.factory(self.dec.fs)
+            if old is not None:
+                self.detector.watch = old.watch
+            name = f"{UDP_NAME} (port {udp[1]})"
+            self.dev_index, self.error = None, None
+            self.info = {"name": name, "udp": udp}
+            self.current = {"name": name, "api": "UDP"}
+            self.log(f"input: {name}, listening on {udp[0]}:{udp[1]} @ {self.sr:.0f} Hz "
+                     f"-> internal {self.dec.fs:.0f} Hz (in Gqrx press UDP in the audio panel)")
+            return True
         try:
             idx = resolve_input(sd, spec)
             info = sd.query_devices(idx, "input") if idx is not None else sd.query_devices(kind="input")
@@ -713,6 +765,9 @@ class LiveCapture:
             if self.info is None:
                 time.sleep(0.5)
                 continue
+            if self.info.get("udp"):
+                warned = self._run_udp(warned)
+                continue
             try:
                 with self.sd.InputStream(device=self.dev_index, channels=self.channels,
                                          samplerate=self.sr, dtype="float32",
@@ -741,6 +796,90 @@ class LiveCapture:
                     time.sleep(0.2)
             finally:
                 self.streaming = False
+
+    UDP_SILENT_S = 0.5     # no packets this long: feed silence so the clock (and the detector) runs on
+    UDP_NOTICE_S = 3.0     # ... and this long: say so on the page
+
+    def _run_udp(self, warned):
+        """Receive Gqrx's UDP audio until the input is changed. Returns `warned`."""
+        import socket
+        host, port = self.info["udp"]
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1 << 20)
+            except OSError:
+                pass
+            sock.bind((host, port))
+            sock.settimeout(0.05)
+        except OSError as e:
+            self.error = f"cannot listen on UDP {host}:{port} ({e})"
+            if warned != self.error:
+                self.log(f"audio: {self.error} - retrying")
+            for _ in range(15):
+                if self._req is not _UNSET or not self.running:
+                    break
+                time.sleep(0.2)
+            return self.error
+        block = int(self.sr * 0.1)                 # 0.1 s blocks, as from a sound card
+        pending = np.zeros(0, np.int16)
+        stereo = None                              # decided from the data rate
+        rate_t0, rate_n = None, 0
+        last_rx = time.perf_counter()
+        next_fill = last_rx + self.UDP_SILENT_S
+        told_silent = False
+        self.streaming = False
+        try:
+            while self.running and self._req is _UNSET:
+                now = time.perf_counter()
+                try:
+                    data = sock.recv(65536)
+                except socket.timeout:
+                    data = None
+                except OSError as e:
+                    self.error = f"UDP receive failed ({e})"
+                    break
+                if data:
+                    now = time.perf_counter()
+                    x = np.frombuffer(data[:len(data) // 2 * 2], dtype="<i2")
+                    if rate_t0 is None:
+                        rate_t0 = now
+                    rate_n += len(x)
+                    if stereo is None and now - rate_t0 >= 2.0:
+                        # 48 kHz mono gives ~48k values a second; stereo twice that
+                        stereo = rate_n / (now - rate_t0) > 1.5 * self.sr
+                        self.log(f"audio: Gqrx UDP audio arriving ({'stereo - using the left channel' if stereo else 'mono'})")
+                    pending = np.concatenate([pending, x])
+                    last_rx = now
+                    next_fill = now + self.UDP_SILENT_S
+                    if not self.streaming or told_silent:
+                        self.streaming, self.error, told_silent = True, None, False
+                    if stereo is None:
+                        continue                   # first 2 s: wait until mono/stereo is known
+                    step = 2 if stereo else 1
+                    while len(pending) >= block * step:
+                        chunk, pending = pending[:block * step], pending[block * step:]
+                        self.detector.feed(self.dec.process(chunk[::step].astype(np.float32) / 32768.0), now, False)
+                    continue
+                # nothing arrived: after a moment, silence at the nominal rate keeps
+                # time running, as a sound card with nothing playing would
+                if now >= next_fill:
+                    while next_fill <= now:
+                        self.detector.feed(self.dec.process(np.zeros(block, np.float32)), next_fill, False)
+                        next_fill += block / self.sr
+                    pending = np.zeros(0, np.int16)
+                if now - last_rx > self.UDP_NOTICE_S and not told_silent:
+                    told_silent, self.streaming = True, False
+                    self.error = (f"no UDP audio on port {port} - in Gqrx press UDP in the audio panel "
+                                  f"(host localhost, port {port})")
+                    if warned != self.error:
+                        self.log(f"audio: {self.error}")
+                        warned = self.error
+        finally:
+            sock.close()
+            self.streaming = False
+        return warned
 
     def status(self) -> dict:
         return {"current": getattr(self, "current", None), "streaming": self.streaming, "error": self.error}
